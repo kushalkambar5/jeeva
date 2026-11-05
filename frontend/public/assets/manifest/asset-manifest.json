@@ -1,0 +1,190 @@
+{
+  "version": "1.0.0",
+  "tileSize": 32,
+  "worldDimensions": {
+    "widthTiles": 40,
+    "heightTiles": 30,
+    "widthPx": 1280,
+    "heightPx": 960
+  },
+  "tilesets": {
+    "serene_village": {
+      "key": "serene_village",
+      "url": "/assets/tilesets/serene_village_32x32.png",
+      "tileWidth": 32,
+      "tileHeight": 32,
+      "columns": 19,
+      "rows": 45
+    },
+    "farm_plants": {
+      "key": "farm_plants",
+      "url": "/assets/tilesets/farm_plants.png",
+      "frameWidth": 16,
+      "frameHeight": 16
+    },
+    "farm_objects": {
+      "key": "farm_objects",
+      "url": "/assets/tilesets/farm_objects.png"
+    }
+  },
+  "buildings": {
+    "main_house": {
+      "key": "main_house",
+      "url": "/assets/buildings/main_house.png",
+      "width": 96,
+      "height": 128
+    },
+    "oak_tree": {
+      "key": "oak_tree",
+      "url": "/assets/buildings/oak_tree.png",
+      "width": 64,
+      "height": 80
+    },
+    "chest": {
+      "key": "chest",
+      "url": "/assets/buildings/chest.png",
+      "width": 16,
+      "height": 16
+    },
+    "hospital_cabinet": {
+      "key": "hospital_cabinet",
+      "url": "/assets/buildings/hospital_cabinet.png",
+      "width": 32,
+      "height": 32
+    },
+    "hospital_bed": {
+      "key": "hospital_bed",
+      "url": "/assets/buildings/hospital_bed.png",
+      "width": 27,
+      "height": 35
+    },
+    "hospital_table": {
+      "key": "hospital_table",
+      "url": "/assets/buildings/hospital_table.png",
+      "width": 64,
+      "height": 32
+    },
+    "mechanic_workshop": {
+      "key": "mechanic_workshop",
+      "url": "/assets/buildings/mechanic_workshop.png",
+      "width": 800,
+      "height": 512
+    }
+  },
+  "interiors": {
+    "retro_floors_walls": {
+      "key": "retro_floors_walls",
+      "url": "/assets/interiors/retro_floors_walls.png"
+    },
+    "retro_furniture": {
+      "key": "retro_furniture",
+      "url": "/assets/interiors/retro_furniture.png"
+    },
+    "home_floors_walls": {
+      "key": "home_floors_walls",
+      "url": "/assets/interiors/home_floors_walls.png"
+    },
+    "home_furniture": {
+      "key": "home_furniture",
+      "url": "/assets/interiors/home_furniture.png"
+    },
+    "shop_tiles": {
+      "key": "shop_tiles",
+      "url": "/assets/interiors/shop_tiles.png"
+    },
+    "shop_props": {
+      "key": "shop_props",
+      "url": "/assets/interiors/shop_props.png"
+    }
+  },
+  "characters": {
+    "player": {
+      "key": "char_player",
+      "url": "/assets/characters/player.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_10"
+    },
+    "wife": {
+      "key": "char_wife",
+      "url": "/assets/characters/wife.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_12"
+    },
+    "doctor": {
+      "key": "char_doctor",
+      "url": "/assets/characters/doctor.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "4x8",
+      "source": "RPG Top Down Character Asset Pack - FREE/Blue Haired Woman"
+    },
+    "shopkeeper": {
+      "key": "char_shopkeeper",
+      "url": "/assets/characters/shopkeeper.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "4x8",
+      "source": "RPG Top Down Character Asset Pack - FREE/Blonde Man"
+    },
+    "mechanic": {
+      "key": "char_mechanic",
+      "url": "/assets/characters/mechanic.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_9"
+    },
+    "elder": {
+      "key": "char_elder",
+      "url": "/assets/characters/elder.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_4"
+    },
+    "farmer": {
+      "key": "char_farmer",
+      "url": "/assets/characters/farmer.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_14"
+    },
+    "policeman": {
+      "key": "char_policeman",
+      "url": "/assets/characters/policeman.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_1"
+    },
+    "thief": {
+      "key": "char_thief",
+      "url": "/assets/characters/thief.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_6"
+    },
+    "villager_1": {
+      "key": "char_villager_1",
+      "url": "/assets/characters/villager_1.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_2"
+    },
+    "villager_2": {
+      "key": "char_villager_2",
+      "url": "/assets/characters/villager_2.png",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "layout": "3x4",
+      "source": "SuperRetroWorld_CharacterPack_Full/sprite_split/character_5"
+    }
+  }
+}
