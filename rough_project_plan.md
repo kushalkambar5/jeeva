@@ -146,6 +146,8 @@ STT Gnani AI Speech-to-text
 
 TTS Gnani AI Text-to-speech
 
+Mem0 for npc memory
+
 Optional model provider Jev AI Only if benchmarked
 latency/cost justifies
 it
