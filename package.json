@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "jeeva",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,10 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.4",
     "lucide-react": "^1.68.0",
     "next": "16.4.5",
     "next-auth": "^4.24.15",
     "phaser": "^4.2.1",
+    "postgres": "^4.0.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -21,9 +23,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
