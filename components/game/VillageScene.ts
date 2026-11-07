@@ -15,104 +15,107 @@ export class VillageScene extends Phaser.Scene {
   };
   private obstacleGroup!: Phaser.Physics.Arcade.StaticGroup;
   private lastFacing: 'down' | 'left' | 'right' | 'up' = 'down';
-  private currentZoom = 1.75;
+  private currentZoom = 1.6;
   private onStateChange?: (event: GameStateEvent) => void;
   private interactionPoints: InteractionPoint[] = [];
   private activeInteraction: InteractionPoint | null = null;
-  private dustEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
   private chestSprite?: Phaser.GameObjects.Image;
   private chestOpened = false;
+
+  // World size: 1920 x 1440
+  public static readonly WORLD_WIDTH = 1920;
+  public static readonly WORLD_HEIGHT = 1440;
 
   private locationZones: LocationZone[] = [
     {
       name: "Player's Homestead",
       zoneId: 'player_home',
-      x1: 120,
-      y1: 80,
-      x2: 360,
-      y2: 340,
-      description: 'Your cozy village cottage with wooden fence and flowerbeds.',
+      x1: 180,
+      y1: 120,
+      x2: 480,
+      y2: 420,
+      description: 'Your cozy village cottage with front porch and stone flowerbeds.',
     },
     {
       name: "Dr. Priya's Health Clinic",
       zoneId: 'hospital',
-      x1: 400,
-      y1: 80,
-      x2: 660,
-      y2: 340,
-      description: 'The village hospital caring for villagers with traditional and modern remedies.',
+      x1: 560,
+      y1: 120,
+      x2: 880,
+      y2: 420,
+      description: 'The village medical center providing care and traditional remedies.',
     },
     {
       name: "Dev's General Store & Market",
       zoneId: 'shop',
-      x1: 720,
-      y1: 80,
-      x2: 960,
-      y2: 340,
-      description: 'Bustling general merchandise and grocery depot stocked with daily supplies.',
+      x1: 1000,
+      y1: 120,
+      x2: 1320,
+      y2: 420,
+      description: 'The community store stocked with provisions, seeds, and trading goods.',
     },
     {
       name: "Arjun's Mechanic & Scrap Workshop",
       zoneId: 'workshop',
-      x1: 1000,
-      y1: 80,
-      x2: 1240,
-      y2: 380,
-      description: 'Heavy machinery, spare parts, tools, and the village backup electrical generator.',
+      x1: 1400,
+      y1: 120,
+      x2: 1720,
+      y2: 440,
+      description: 'Heavy machinery repair shop, tools, and the village electrical generator.',
     },
     {
       name: 'Kaveripura Central Plaza',
       zoneId: 'central_plaza',
-      x1: 520,
-      y1: 360,
-      x2: 760,
-      y2: 560,
-      description: 'The heartbeat of the village with the central freshwater stone fountain.',
+      x1: 780,
+      y1: 460,
+      x2: 1120,
+      y2: 740,
+      description: 'The town square with the central stone fountain and crossroads.',
     },
     {
-      name: "Ravi's Farmstead & Barn",
+      name: "Ravi's Farmstead Barn",
       zoneId: 'farm_barn',
-      x1: 80,
-      y1: 520,
-      x2: 280,
-      y2: 740,
-      description: 'Timber red barn, grain storage, and animal shelter.',
+      x1: 180,
+      y1: 780,
+      x2: 480,
+      y2: 1060,
+      description: 'Ravi\'s red timber barn, silo, and tool sheds.',
     },
     {
       name: 'Cultivated Crop Fields',
       zoneId: 'farm_crops',
-      x1: 280,
-      y1: 560,
-      x2: 480,
-      y2: 780,
+      x1: 480,
+      y1: 740,
+      x2: 800,
+      y2: 1020,
       description: 'Rich agricultural fields yielding carrots, wheat, and pumpkins.',
     },
     {
       name: 'Lotus Pond & Fishing Pier',
       zoneId: 'pond',
-      x1: 40,
-      y1: 740,
-      x2: 260,
-      y2: 930,
-      description: 'Tranquil freshwater pond with floating lily pads and wooden dock.',
+      x1: 140,
+      y1: 1060,
+      x2: 560,
+      y2: 1360,
+      description: 'Tranquil freshwater pond with floating lily pads and a wooden dock.',
     },
     {
       name: 'Village Police & Guard Post',
       zoneId: 'police_post',
-      x1: 760,
-      y1: 520,
-      x2: 980,
-      y2: 740,
-      description: 'Security outpost keeping Kaveripura safe with notice board and watchtower.',
+      x1: 1280,
+      y1: 780,
+      x2: 1580,
+      y2: 1060,
+      description: 'Security outpost with notice board and watchtower.',
     },
     {
       name: 'Whispering Oak Grove',
       zoneId: 'grove',
-      x1: 1040,
-      y1: 740,
-      x2: 1240,
-      y2: 920,
-      description: 'A serene ancient oak clearing hiding long-forgotten treasures.',
+      x1: 1600,
+      y1: 1120,
+      x2: 1880,
+      y2: 1380,
+      description: 'An ancient oak clearing hiding long-forgotten village treasures.',
     },
   ];
 
@@ -136,7 +139,7 @@ export class VillageScene extends Phaser.Scene {
     });
     this.load.image('farm_objects', '/assets/tilesets/farm_objects.png');
 
-    // 3. Hand-crafted and extracted building sprites
+    // 3. Complete standalone building sprites (96x128 each)
     this.load.image('building_main_house', '/assets/buildings/main_house.png');
     this.load.image('building_hospital', '/assets/buildings/hospital.png');
     this.load.image('building_shop', '/assets/buildings/shop.png');
@@ -147,7 +150,7 @@ export class VillageScene extends Phaser.Scene {
     this.load.image('prop_chest', '/assets/buildings/chest.png');
     this.load.image('village_fountain', '/assets/buildings/village_fountain.png');
 
-    // 4. Player character ONLY (SuperRetroWorld 3x4 layout, 32x32)
+    // 4. Player character ONLY
     this.load.spritesheet('player', '/assets/characters/player.png', {
       frameWidth: 32,
       frameHeight: 32,
@@ -155,8 +158,12 @@ export class VillageScene extends Phaser.Scene {
   }
 
   create() {
-    // World Dimensions: 1280 x 960 px
-    this.physics.world.setBounds(0, 0, 1280, 960);
+    const W = VillageScene.WORLD_WIDTH;
+    const H = VillageScene.WORLD_HEIGHT;
+
+    // Set background color to exact meadow grass green so zero black space appears anywhere
+    this.cameras.main.setBackgroundColor('#79C867');
+    this.physics.world.setBounds(0, 0, W, H);
 
     // 1. Create Tilemap
     const map = this.make.tilemap({ key: 'village_map' });
@@ -176,19 +183,19 @@ export class VillageScene extends Phaser.Scene {
       }
     }
 
-    // 2. Obstacle Static Group for Buildings, Trees & Props
+    // 2. Obstacle Static Group
     this.obstacleGroup = this.physics.add.staticGroup();
 
-    // 3. Spawn Buildings
+    // 3. Spawn Buildings (96x128 complete standalone houses)
     this.spawnBuildings();
 
-    // 4. Spawn Central Plaza Fountain & Decorations
+    // 4. Spawn Central Plaza Fountain & Water Ripples
     this.spawnCentralPlaza();
 
     // 5. Spawn Farmland Crops & Props
     this.spawnFarmland();
 
-    // 6. Spawn Pond Features & Dock
+    // 6. Spawn Pond Features & Pier
     this.spawnPond();
 
     // 7. Spawn Trees & Environment Foliage
@@ -200,7 +207,7 @@ export class VillageScene extends Phaser.Scene {
     // 9. Setup Interaction Points
     this.setupInteractionPoints();
 
-    // 10. Spawn Player Character
+    // 10. Spawn Player Character (spawn outside player house at x: 336, y: 350)
     this.spawnPlayer();
 
     // 11. Add Colliders
@@ -216,78 +223,68 @@ export class VillageScene extends Phaser.Scene {
     // 13. Setup Input
     this.setupInputs();
 
-    // 14. Subtle Ambient Floating Dust / Spores Particle Effect
-    this.setupAmbientAtmosphere();
+    // 14. Responsive window resize handler
+    this.scale.on('resize', this.handleResize, this);
+  }
+
+  private handleResize() {
+    this.cameras.main.setSize(this.scale.width, this.scale.height);
   }
 
   private spawnBuildings() {
-    // 1. Player's House (Kushal's Home)
-    // 96x128 sprite at x: 224, y: 160
-    const playerHouse = this.add.image(224, 160, 'building_main_house').setOrigin(0.5, 0.5);
-    playerHouse.setDepth(160 + 50);
+    // 1. Player's Cottage (96x128) at x: 336, y: 240
+    const playerHouse = this.add.image(336, 240, 'building_main_house').setOrigin(0.5, 0.5);
+    playerHouse.setDepth(240 + 50);
 
-    // Physics body at the base/walls
-    const houseCollider = this.obstacleGroup.create(224, 175, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    houseCollider.setSize(86, 44);
+    const houseCollider = this.obstacleGroup.create(336, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    houseCollider.setSize(84, 38);
     houseCollider.setVisible(false);
+    this.addMarkerLabel(336, 165, "Player's Cottage", '#93C476');
 
-    // Add wooden fence around front garden
-    this.addMarkerLabel(224, 90, "Player's House", '#93C476');
+    // 2. Village Health Clinic (96x128 Blue House) at x: 720, y: 240
+    const hospital = this.add.image(720, 240, 'building_hospital').setOrigin(0.5, 0.5);
+    hospital.setDepth(240 + 50);
 
-    // 2. Village Hospital (Dr. Priya's Health Clinic)
-    // 160x128 sprite at x: 528, y: 160
-    const hospital = this.add.image(528, 160, 'building_hospital').setOrigin(0.5, 0.5);
-    hospital.setDepth(160 + 50);
-
-    const hospitalCollider = this.obstacleGroup.create(528, 175, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    hospitalCollider.setSize(144, 48);
+    const hospitalCollider = this.obstacleGroup.create(720, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    hospitalCollider.setSize(84, 38);
     hospitalCollider.setVisible(false);
+    this.addMarkerLabel(720, 165, 'Village Clinic', '#75B9D0');
 
-    this.addMarkerLabel(528, 90, 'Village Clinic', '#75B9D0');
+    // 3. Dev's General Store (96x128 Red House) at x: 1168, y: 240
+    const shop = this.add.image(1168, 240, 'building_shop').setOrigin(0.5, 0.5);
+    shop.setDepth(240 + 50);
 
-    // 3. Dev's General Store & Provisions
-    // 128x128 sprite at x: 832, y: 160
-    const shop = this.add.image(832, 160, 'building_shop').setOrigin(0.5, 0.5);
-    shop.setDepth(160 + 50);
-
-    const shopCollider = this.obstacleGroup.create(832, 175, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    shopCollider.setSize(114, 46);
+    const shopCollider = this.obstacleGroup.create(1168, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    shopCollider.setSize(84, 38);
     shopCollider.setVisible(false);
+    this.addMarkerLabel(1168, 165, 'General Store', '#F4D477');
 
-    this.addMarkerLabel(832, 90, 'General Store', '#F4D477');
+    // 4. Arjun's Mechanic Workshop (96x128 Green/Stone House) at x: 1552, y: 240
+    const workshop = this.add.image(1552, 240, 'building_workshop').setOrigin(0.5, 0.5);
+    workshop.setDepth(240 + 50);
 
-    // 4. Arjun's Mechanic Workshop
-    // 160x128 sprite at x: 1104, y: 168
-    const workshop = this.add.image(1104, 168, 'building_workshop').setOrigin(0.5, 0.5);
-    workshop.setDepth(168 + 50);
-
-    const workshopCollider = this.obstacleGroup.create(1104, 185, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    workshopCollider.setSize(146, 50);
+    const workshopCollider = this.obstacleGroup.create(1552, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    workshopCollider.setSize(84, 38);
     workshopCollider.setVisible(false);
+    this.addMarkerLabel(1552, 165, "Arjun's Workshop", '#C87545');
 
-    this.addMarkerLabel(1104, 98, "Arjun's Workshop", '#C87545');
+    // 5. Ravi's Farm Barn (96x128 Red Barn) at x: 336, y: 920
+    const barn = this.add.image(336, 920, 'building_farm_barn').setOrigin(0.5, 0.5);
+    barn.setDepth(920 + 50);
 
-    // 5. Ravi's Farmstead Barn
-    // 128x128 sprite at x: 176, y: 624
-    const barn = this.add.image(176, 624, 'building_farm_barn').setOrigin(0.5, 0.5);
-    barn.setDepth(624 + 50);
-
-    const barnCollider = this.obstacleGroup.create(176, 640, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    barnCollider.setSize(116, 48);
+    const barnCollider = this.obstacleGroup.create(336, 940, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    barnCollider.setSize(84, 38);
     barnCollider.setVisible(false);
+    this.addMarkerLabel(336, 845, "Ravi's Barn", '#E98F9F');
 
-    this.addMarkerLabel(176, 554, "Ravi's Barn", '#E98F9F');
+    // 6. Police & Guard Post (96x128 Green Guard House) at x: 1424, y: 920
+    const policePost = this.add.image(1424, 920, 'building_police_post').setOrigin(0.5, 0.5);
+    policePost.setDepth(920 + 50);
 
-    // 6. Kaveripura Police & Guard Post
-    // 128x128 sprite at x: 864, y: 624
-    const policePost = this.add.image(864, 624, 'building_police_post').setOrigin(0.5, 0.5);
-    policePost.setDepth(624 + 50);
-
-    const policeCollider = this.obstacleGroup.create(864, 640, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    policeCollider.setSize(116, 48);
+    const policeCollider = this.obstacleGroup.create(1424, 940, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    policeCollider.setSize(84, 38);
     policeCollider.setVisible(false);
-
-    this.addMarkerLabel(864, 554, 'Police Post', '#78A85B');
+    this.addMarkerLabel(1424, 845, 'Police Post', '#78A85B');
   }
 
   private addMarkerLabel(x: number, y: number, text: string, color = '#FFFFFF') {
@@ -304,38 +301,37 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnCentralPlaza() {
-    // Village Central Fountain (128x96)
-    const fountain = this.add.image(640, 448, 'village_fountain').setOrigin(0.5, 0.5);
-    fountain.setDepth(448 + 20);
+    // Village Central Fountain (64x64 pixel art stone fountain) at x: 944, y: 608
+    const fountain = this.add.image(944, 608, 'village_fountain').setOrigin(0.5, 0.5);
+    fountain.setDepth(608 + 20);
 
-    const fountainCollider = this.obstacleGroup.create(640, 455, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    fountainCollider.setSize(92, 40);
+    const fountainCollider = this.obstacleGroup.create(944, 614, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    fountainCollider.setCircle(22, -22, -22);
     fountainCollider.setVisible(false);
 
-    this.addMarkerLabel(640, 396, 'Kaveripura Fountain', '#75B9D0');
+    this.addMarkerLabel(944, 560, 'Kaveripura Fountain', '#75B9D0');
 
-    // Small water ripple effect in fountain center
-    const circle = this.add.circle(640, 446, 8, 0x75b9d0, 0.4);
-    circle.setDepth(448 + 21);
+    // Water ripple effect in fountain basin
+    const circle = this.add.circle(944, 608, 12, 0x75b9d0, 0.4);
+    circle.setDepth(608 + 21);
     this.tweens.add({
       targets: circle,
-      scaleX: 1.6,
-      scaleY: 1.6,
+      scaleX: 1.5,
+      scaleY: 1.5,
       alpha: 0,
-      duration: 1800,
+      duration: 1600,
       repeat: -1,
       ease: 'Quad.easeOut',
     });
   }
 
   private spawnFarmland() {
-    // Crop fields at x: 300..460, y: 600..730
-    // Spawn neat rows of carrots, wheat, cabbages using 'farm_plants'
+    // Crop fields at x: 500..740, y: 780..980
     const cropTypes = [0, 1, 2, 8, 9, 10, 16, 17];
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 6; col++) {
-        const cropX = 310 + col * 26;
-        const cropY = 610 + row * 32;
+    for (let row = 0; row < 6; row++) {
+      for (let col = 0; col < 8; col++) {
+        const cropX = 510 + col * 30;
+        const cropY = 790 + row * 32;
         const frameIdx = cropTypes[(row * 2 + col) % cropTypes.length];
         const plant = this.add.sprite(cropX, cropY, 'farm_plants', frameIdx);
         plant.setScale(1.2);
@@ -343,28 +339,26 @@ export class VillageScene extends Phaser.Scene {
       }
     }
 
-    // Wooden scarecrow / prop in the middle
-    const scarecrow = this.add.circle(388, 660, 4, 0xd4a373);
-    scarecrow.setDepth(660);
-    this.addMarkerLabel(388, 590, 'Crop Fields', '#93C476');
+    this.addMarkerLabel(625, 755, 'Crop Fields', '#93C476');
   }
 
   private spawnPond() {
-    // Water lotus pond at bottom-left
-    // Wooden pier / dock: x: 140, y: 780
-    const dock = this.add.rectangle(130, 775, 40, 18, 0x8b5a2b);
+    // Lotus pond at x: 192..512, y: 1088..1280
+    // Wooden pier / dock: x: 530, y: 1200
+    const dock = this.add.rectangle(520, 1200, 56, 20, 0x8b5a2b);
     dock.setStrokeStyle(2, 0x5c3a1e);
-    dock.setDepth(776);
+    dock.setDepth(1201);
 
     // Lily pad circles on pond water
     const lilyPads = [
-      { x: 90, y: 810 },
-      { x: 130, y: 840 },
-      { x: 80, y: 860 },
-      { x: 160, y: 820 },
+      { x: 260, y: 1140 },
+      { x: 380, y: 1180 },
+      { x: 300, y: 1220 },
+      { x: 440, y: 1150 },
+      { x: 340, y: 1250 },
     ];
     lilyPads.forEach((lp) => {
-      const pad = this.add.circle(lp.x, lp.y, 6, 0x2d6a4f, 0.7);
+      const pad = this.add.circle(lp.x, lp.y, 7, 0x2d6a4f, 0.7);
       pad.setDepth(lp.y);
       this.tweens.add({
         targets: pad,
@@ -376,54 +370,62 @@ export class VillageScene extends Phaser.Scene {
       });
     });
 
-    this.addMarkerLabel(110, 750, 'Lotus Pond', '#75B9D0');
+    this.addMarkerLabel(352, 1070, 'Lotus Pond', '#75B9D0');
   }
 
   private spawnTreesAndFoliage() {
-    // Strategic tree coordinates along village borders and scenic groves
     const treePositions = [
       // North forest edge
-      { x: 70, y: 55 },
-      { x: 130, y: 50 },
-      { x: 330, y: 50 },
-      { x: 390, y: 55 },
-      { x: 670, y: 50 },
-      { x: 730, y: 55 },
-      { x: 970, y: 50 },
-      { x: 1220, y: 55 },
+      { x: 100, y: 70 },
+      { x: 200, y: 65 },
+      { x: 480, y: 65 },
+      { x: 580, y: 70 },
+      { x: 860, y: 65 },
+      { x: 960, y: 70 },
+      { x: 1320, y: 65 },
+      { x: 1420, y: 70 },
+      { x: 1700, y: 65 },
+      { x: 1820, y: 70 },
       // West perimeter
-      { x: 45, y: 150 },
-      { x: 45, y: 260 },
-      { x: 45, y: 380 },
-      { x: 45, y: 490 },
+      { x: 60, y: 200 },
+      { x: 60, y: 360 },
+      { x: 60, y: 520 },
+      { x: 60, y: 680 },
+      { x: 60, y: 840 },
+      { x: 60, y: 1000 },
+      { x: 60, y: 1160 },
+      { x: 60, y: 1320 },
       // East perimeter
-      { x: 1235, y: 200 },
-      { x: 1235, y: 340 },
-      { x: 1235, y: 480 },
-      { x: 1235, y: 620 },
-      { x: 1235, y: 760 },
-      { x: 1235, y: 890 },
+      { x: 1860, y: 200 },
+      { x: 1860, y: 360 },
+      { x: 1860, y: 520 },
+      { x: 1860, y: 680 },
+      { x: 1860, y: 840 },
+      { x: 1860, y: 1000 },
+      { x: 1860, y: 1160 },
+      { x: 1860, y: 1320 },
       // South boundary & grove
-      { x: 360, y: 915 },
-      { x: 460, y: 915 },
-      { x: 570, y: 915 },
-      { x: 680, y: 915 },
-      { x: 790, y: 915 },
-      { x: 1010, y: 915 },
-      { x: 1110, y: 915 },
-      // Pond side grove
-      { x: 215, y: 770 },
-      { x: 205, y: 870 },
+      { x: 600, y: 1390 },
+      { x: 740, y: 1390 },
+      { x: 880, y: 1390 },
+      { x: 1020, y: 1390 },
+      { x: 1160, y: 1390 },
+      { x: 1300, y: 1390 },
+      { x: 1440, y: 1390 },
+      { x: 1580, y: 1390 },
+      { x: 1720, y: 1390 },
+      // Pond side trees
+      { x: 120, y: 1020 },
+      { x: 550, y: 1270 },
       // Secret east grove
-      { x: 1120, y: 820 },
-      { x: 1210, y: 810 },
+      { x: 1720, y: 1240 },
+      { x: 1820, y: 1220 },
     ];
 
     treePositions.forEach((pos) => {
       const tree = this.add.image(pos.x, pos.y, 'prop_oak_tree').setOrigin(0.5, 0.5);
       tree.setDepth(pos.y + 35);
 
-      // Circular collider at trunk base
       const collider = this.obstacleGroup.create(pos.x, pos.y + 24, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
       collider.setCircle(14, -14, -14);
       collider.setVisible(false);
@@ -431,14 +433,12 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnSecretChest() {
-    // Hidden treasure chest in the southeast oak grove: x: 1180, y: 850
-    this.chestSprite = this.add.image(1175, 845, 'prop_chest').setOrigin(0.5, 0.5);
+    this.chestSprite = this.add.image(1780, 1280, 'prop_chest').setOrigin(0.5, 0.5);
     this.chestSprite.setScale(1.5);
-    this.chestSprite.setDepth(845);
+    this.chestSprite.setDepth(1280);
 
-    // Subtle pulsing sparkle indicator
-    const glow = this.add.circle(1175, 845, 12, 0xf4d477, 0.3);
-    glow.setDepth(844);
+    const glow = this.add.circle(1780, 1280, 12, 0xf4d477, 0.3);
+    glow.setDepth(1279);
     this.tweens.add({
       targets: glow,
       scaleX: 1.4,
@@ -455,21 +455,21 @@ export class VillageScene extends Phaser.Scene {
     this.interactionPoints = [
       {
         id: 'door_player_home',
-        name: "Player's House",
+        name: "Player's Cottage",
         type: 'door',
-        x: 224,
-        y: 215,
+        x: 336,
+        y: 290,
         radius: 46,
         title: "Kushal's Cottage",
-        description: 'Your home in Kaveripura. Clean, warm, and stocked with daily essentials. Ready for interior entrance in the next phase.',
+        description: 'Your home in Kaveripura. Clean, warm, and stocked with daily essentials. Ready for interior level load in next phase.',
         actionLabel: 'Knock / Enter',
       },
       {
         id: 'door_hospital',
         name: 'Village Clinic',
         type: 'door',
-        x: 528,
-        y: 215,
+        x: 720,
+        y: 290,
         radius: 48,
         title: "Dr. Priya's Health Clinic",
         description: 'Village healthcare center. Priya prepares herbal compresses and medical care for the recovering community.',
@@ -479,8 +479,8 @@ export class VillageScene extends Phaser.Scene {
         id: 'door_shop',
         name: "Dev's General Store",
         type: 'door',
-        x: 832,
-        y: 215,
+        x: 1168,
+        y: 290,
         radius: 46,
         title: "Dev's Provisions",
         description: 'Dry goods, salt, tools, and grain sacks. Dev trades with merchants from neighboring villages.',
@@ -490,8 +490,8 @@ export class VillageScene extends Phaser.Scene {
         id: 'door_workshop',
         name: "Arjun's Workshop",
         type: 'door',
-        x: 1104,
-        y: 225,
+        x: 1552,
+        y: 290,
         radius: 48,
         title: "Arjun's Mechanic Garage",
         description: 'Sparks fly from metal fabrication tools. Arjun maintains irrigation pumps, generators, and vehicle motors.',
@@ -501,8 +501,8 @@ export class VillageScene extends Phaser.Scene {
         id: 'door_farm_barn',
         name: "Ravi's Farm Barn",
         type: 'door',
-        x: 176,
-        y: 680,
+        x: 336,
+        y: 970,
         radius: 46,
         title: "Ravi's Barn & Silo",
         description: 'Fresh straw, pitchforks, and bags of winter feed. Ravi oversees the village grain supply.',
@@ -512,8 +512,8 @@ export class VillageScene extends Phaser.Scene {
         id: 'door_police_post',
         name: 'Police Post',
         type: 'door',
-        x: 864,
-        y: 680,
+        x: 1424,
+        y: 970,
         radius: 46,
         title: 'Kaveripura Guard Station',
         description: 'The village law and order outpost. The notice board lists storm relief alerts and perimeter patrol reports.',
@@ -523,10 +523,10 @@ export class VillageScene extends Phaser.Scene {
         id: 'plaza_fountain',
         name: 'Village Fountain',
         type: 'inspect',
-        x: 640,
-        y: 448,
+        x: 944,
+        y: 608,
         radius: 56,
-        title: 'Ancient Stone Fountain',
+        title: 'Kaveripura Stone Fountain',
         description: 'Carved from weathered Deccan stone. Fresh water trickles continually, acting as the community gathering spot.',
         actionLabel: 'Drink Water',
       },
@@ -534,30 +534,19 @@ export class VillageScene extends Phaser.Scene {
         id: 'farm_crops_node',
         name: 'Crop Fields',
         type: 'resource',
-        x: 388,
-        y: 660,
+        x: 625,
+        y: 860,
         radius: 64,
         title: 'Lush Vegetable Rows',
-        description: 'Organic carrots, cabbages, and pumpkins thriving in fertilized black soil.',
+        description: 'Organic carrots, cabbages, and pumpkins thriving in fertilized soil.',
         actionLabel: 'Inspect Crops',
-      },
-      {
-        id: 'village_generator',
-        name: 'Village Generator',
-        type: 'inspect',
-        x: 1150,
-        y: 320,
-        radius: 50,
-        title: 'Auxiliary Diesel Generator',
-        description: 'Key infrastructure powering the clinic refrigeration unit. Currently waiting on spare spark plugs.',
-        actionLabel: 'Inspect Machinery',
       },
       {
         id: 'secret_chest',
         name: 'Ancient Chest',
         type: 'chest',
-        x: 1175,
-        y: 845,
+        x: 1780,
+        y: 1280,
         radius: 42,
         title: 'Weathered Brass Chest',
         description: 'An old ironbound chest tucked away under the whispering oak canopy.',
@@ -567,17 +556,15 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnPlayer() {
-    // Only player character from public/assets/characters/player.png!
-    // Spawn at x: 256, y: 288 (on the stone pathway outside the player cottage)
-    this.player = this.physics.add.sprite(256, 288, 'player', 1);
+    // Spawn player outside player's house on the stone path
+    this.player = this.physics.add.sprite(336, 350, 'player', 1);
     this.player.setOrigin(0.5, 0.7);
     this.player.body?.setSize(16, 16);
     this.player.body?.setOffset(8, 16);
     this.player.setCollideWorldBounds(true);
-    this.player.setDepth(288);
+    this.player.setDepth(350);
 
-    // 4-Directional Walk Animations (SuperRetroWorld 3x4 layout)
-    // Down: row 0 (frames 0, 1, 2)
+    // 4-Directional Walk Animations
     this.anims.create({
       key: 'player-walk-down',
       frames: this.anims.generateFrameNumbers('player', { frames: [0, 1, 2, 1] }),
@@ -585,7 +572,6 @@ export class VillageScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Left: row 1 (frames 3, 4, 5)
     this.anims.create({
       key: 'player-walk-left',
       frames: this.anims.generateFrameNumbers('player', { frames: [3, 4, 5, 4] }),
@@ -593,7 +579,6 @@ export class VillageScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Right: row 2 (frames 6, 7, 8)
     this.anims.create({
       key: 'player-walk-right',
       frames: this.anims.generateFrameNumbers('player', { frames: [6, 7, 8, 7] }),
@@ -601,7 +586,6 @@ export class VillageScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Up: row 3 (frames 9, 10, 11)
     this.anims.create({
       key: 'player-walk-up',
       frames: this.anims.generateFrameNumbers('player', { frames: [9, 10, 11, 10] }),
@@ -609,13 +593,12 @@ export class VillageScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Initial idle facing down
     this.player.setFrame(1);
   }
 
   private setupCamera() {
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
-    this.cameras.main.setBounds(0, 0, 1280, 960);
+    this.cameras.main.setBounds(0, 0, VillageScene.WORLD_WIDTH, VillageScene.WORLD_HEIGHT);
     this.cameras.main.setZoom(this.currentZoom);
     this.cameras.main.roundPixels = true;
   }
@@ -633,12 +616,10 @@ export class VillageScene extends Phaser.Scene {
       interact: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
     };
 
-    // Zoom Toggle Key (Z)
     this.input.keyboard.on('keydown-Z', () => {
       this.cycleZoom();
     });
 
-    // Interaction Trigger Key (E or Space)
     this.input.keyboard.on('keydown-E', () => {
       this.triggerActiveInteraction();
     });
@@ -647,28 +628,10 @@ export class VillageScene extends Phaser.Scene {
     });
   }
 
-  private setupAmbientAtmosphere() {
-    // Gentle floating light dust particles
-    const particles = this.add.particles(0, 0, 'farm_plants', {
-      frame: 1,
-      x: { min: 40, max: 1240 },
-      y: { min: 40, max: 920 },
-      lifespan: 5000,
-      speedX: { min: -10, max: 10 },
-      speedY: { min: -10, max: 10 },
-      scale: { start: 0.2, end: 0 },
-      alpha: { start: 0.3, end: 0 },
-      blendMode: 'ADD',
-      frequency: 250,
-      maxParticles: 40,
-    });
-    particles.setDepth(999);
-  }
-
   public cycleZoom() {
-    if (this.currentZoom === 1.0) this.currentZoom = 1.5;
-    else if (this.currentZoom === 1.5) this.currentZoom = 2.0;
-    else this.currentZoom = 1.0;
+    if (this.currentZoom === 1.2) this.currentZoom = 1.6;
+    else if (this.currentZoom === 1.6) this.currentZoom = 2.0;
+    else this.currentZoom = 1.2;
 
     this.cameras.main.zoomTo(this.currentZoom, 300, 'Sine.easeInOut');
   }
@@ -676,10 +639,6 @@ export class VillageScene extends Phaser.Scene {
   public setZoomLevel(zoom: number) {
     this.currentZoom = zoom;
     this.cameras.main.zoomTo(this.currentZoom, 300, 'Sine.easeInOut');
-  }
-
-  public getZoomLevel(): number {
-    return this.currentZoom;
   }
 
   public triggerActiveInteraction() {
@@ -706,7 +665,6 @@ export class VillageScene extends Phaser.Scene {
       sound.playInteractClick();
     }
 
-    // Notify React
     if (this.onStateChange) {
       this.onStateChange({
         playerX: Math.round(this.player.x),
@@ -733,7 +691,6 @@ export class VillageScene extends Phaser.Scene {
   update() {
     if (!this.player || !this.player.body) return;
 
-    // 1. Calculate Velocity & Movement
     let vx = 0;
     let vy = 0;
 
@@ -743,14 +700,13 @@ export class VillageScene extends Phaser.Scene {
     const isRight = this.cursors?.right?.isDown || this.wasd?.right?.isDown;
     const isSprinting = Boolean(this.cursors?.shift?.isDown || this.wasd?.sprint?.isDown);
 
-    const baseSpeed = isSprinting ? 210 : 125;
+    const baseSpeed = isSprinting ? 220 : 130;
 
     if (isUp) vy -= 1;
     if (isDown) vy += 1;
     if (isLeft) vx -= 1;
     if (isRight) vx += 1;
 
-    // Normalize diagonal movement speed
     if (vx !== 0 && vy !== 0) {
       vx *= Math.SQRT1_2;
       vy *= Math.SQRT1_2;
@@ -758,7 +714,6 @@ export class VillageScene extends Phaser.Scene {
 
     this.player.setVelocity(vx * baseSpeed, vy * baseSpeed);
 
-    // 2. Play Animations & Handle Facing
     const isMoving = vx !== 0 || vy !== 0;
 
     if (isMoving) {
@@ -800,10 +755,10 @@ export class VillageScene extends Phaser.Scene {
       }
     }
 
-    // 3. Y-Depth Sorting for Player (2.5D visual depth)
+    // Depth sorting
     this.player.setDepth(this.player.y);
 
-    // 4. Check Nearest Interaction Point
+    // Interaction checks
     let nearest: InteractionPoint | null = null;
     let minDistance = 999999;
 
@@ -822,7 +777,6 @@ export class VillageScene extends Phaser.Scene {
       sound.playChime();
     }
 
-    // 5. Emit state updates periodically or on change
     if (this.onStateChange) {
       this.onStateChange({
         playerX: Math.round(this.player.x),

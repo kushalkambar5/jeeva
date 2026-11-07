@@ -2,10 +2,10 @@
   "version": "1.0.0",
   "tileSize": 32,
   "worldDimensions": {
-    "widthTiles": 40,
-    "heightTiles": 30,
-    "widthPx": 1280,
-    "heightPx": 960
+    "widthTiles": 60,
+    "heightTiles": 45,
+    "widthPx": 1920,
+    "heightPx": 1440
   },
   "tilesets": {
     "serene_village": {
@@ -37,32 +37,38 @@
     "hospital": {
       "key": "building_hospital",
       "url": "/assets/buildings/hospital.png",
-      "width": 160,
+      "width": 96,
       "height": 128
     },
     "shop": {
       "key": "building_shop",
       "url": "/assets/buildings/shop.png",
-      "width": 128,
+      "width": 96,
       "height": 128
     },
     "workshop": {
       "key": "building_workshop",
       "url": "/assets/buildings/workshop.png",
-      "width": 160,
+      "width": 96,
       "height": 128
     },
     "farm_barn": {
       "key": "building_farm_barn",
       "url": "/assets/buildings/farm_barn.png",
-      "width": 128,
+      "width": 96,
       "height": 128
     },
     "police_post": {
       "key": "building_police_post",
       "url": "/assets/buildings/police_post.png",
-      "width": 128,
+      "width": 96,
       "height": 128
+    },
+    "village_fountain": {
+      "key": "village_fountain",
+      "url": "/assets/buildings/village_fountain.png",
+      "width": 64,
+      "height": 64
     },
     "oak_tree": {
       "key": "prop_oak_tree",

@@ -51,9 +51,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
       const config: PhaserTypes.Types.Core.GameConfig = {
         type: Phaser.AUTO,
         parent: containerRef.current,
-        width: 1280,
-        height: 720,
-        backgroundColor: '#1F3B27',
+        backgroundColor: '#79C867', // Exact meadow grass green: zero black space
         physics: {
           default: 'arcade',
           arcade: {
@@ -67,7 +65,9 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
           roundPixels: true,
         },
         scale: {
-          mode: Phaser.Scale.FIT,
+          mode: Phaser.Scale.RESIZE,
+          width: '100%',
+          height: '100%',
           autoCenter: Phaser.Scale.CENTER_BOTH,
         },
         scene: [scene],
@@ -76,7 +76,6 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
       const game = new Phaser.Game(config);
       gameRef.current = game;
 
-      // Pass state callback once the scene is ready
       game.events.once('ready', () => {
         if (!isMounted) return;
         scene.init({ onStateChange });
@@ -98,7 +97,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
   return (
     <div
       ref={containerRef}
-      className="w-full h-full flex items-center justify-center overflow-hidden select-none bg-[#0F1712]"
+      className="w-full h-full overflow-hidden select-none bg-[#79C867]"
       style={{ imageRendering: 'pixelated' }}
     />
   );

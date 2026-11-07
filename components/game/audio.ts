@@ -5,12 +5,19 @@ class SoundEngine {
   private lastFootstepTime: number = 0;
 
   private init() {
-    if (!this.ctx && typeof window !== 'undefined') {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (AudioCtx) {
+    if (typeof window === 'undefined') return;
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    if (!this.ctx || this.ctx.state === 'closed') {
+      try {
         this.ctx = new AudioCtx();
+      } catch {
+        this.ctx = null;
+        return;
       }
     }
+
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
