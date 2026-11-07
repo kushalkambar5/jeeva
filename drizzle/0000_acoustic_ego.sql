@@ -1,0 +1,20 @@
+CREATE TABLE "npc_definitions" (
+	"id" varchar(50) PRIMARY KEY NOT NULL,
+	"name" varchar(100) NOT NULL,
+	"role" varchar(100) NOT NULL,
+	"bio" text NOT NULL,
+	"personality_traits" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"speaking_style" text NOT NULL,
+	"system_prompt" text NOT NULL,
+	"core_goals" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"fears" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"moral_values" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"voice_provider" varchar(50) DEFAULT 'gnani',
+	"voice_id" varchar(100) NOT NULL,
+	"default_language" varchar(20) DEFAULT 'hi-IN',
+	"sprite_key" varchar(100) NOT NULL,
+	"allowed_actions" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"home_zone" varchar(100) NOT NULL,
+	"default_schedule" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now()
+);
