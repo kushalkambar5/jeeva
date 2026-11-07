@@ -8,6 +8,7 @@ export interface PhaserGameRef {
   cycleZoom: () => void;
   setZoom: (zoom: number) => void;
   triggerInteraction: () => void;
+  exitInterior: () => void;
 }
 
 interface PhaserGameProps {
@@ -20,17 +21,35 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<PhaserTypes.Game | null>(null);
-  const sceneRef = useRef<import('./VillageScene').VillageScene | null>(null);
 
   useImperativeHandle(ref, () => ({
     cycleZoom: () => {
-      sceneRef.current?.cycleZoom();
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.cycleZoom) {
+        current.cycleZoom();
+      }
     },
     setZoom: (zoom: number) => {
-      sceneRef.current?.setZoomLevel(zoom);
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.setZoomLevel) {
+        current.setZoomLevel(zoom);
+      }
     },
     triggerInteraction: () => {
-      sceneRef.current?.triggerActiveInteraction();
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.triggerActiveInteraction) {
+        current.triggerActiveInteraction();
+      }
+    },
+    exitInterior: () => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.exitToVillage) {
+        current.exitToVillage();
+      }
     },
   }));
 
@@ -42,11 +61,12 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
 
       const Phaser = (await import('phaser')).default;
       const { VillageScene } = await import('./VillageScene');
+      const { InteriorScene } = await import('./InteriorScene');
 
       if (!isMounted || !containerRef.current) return;
 
-      const scene = new VillageScene();
-      sceneRef.current = scene;
+      const villageScene = new VillageScene();
+      const interiorScene = new InteriorScene();
 
       const config: PhaserTypes.Types.Core.GameConfig = {
         type: Phaser.AUTO,
@@ -70,7 +90,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
           height: '100%',
           autoCenter: Phaser.Scale.CENTER_BOTH,
         },
-        scene: [scene],
+        scene: [villageScene, interiorScene],
       };
 
       const game = new Phaser.Game(config);
@@ -78,7 +98,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
 
       game.events.once('ready', () => {
         if (!isMounted) return;
-        scene.init({ onStateChange });
+        villageScene.init({ onStateChange });
       });
     }
 
@@ -89,7 +109,6 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
-        sceneRef.current = null;
       }
     };
   }, [onStateChange]);

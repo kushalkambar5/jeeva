@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
-import { InteractionPoint, LocationZone, GameStateEvent } from './types';
+import { InteractionPoint, LocationZone, GameStateEvent, InteriorType } from './types';
 import { sound } from './audio';
+
+export interface VillageSceneInitData {
+  returnPos?: { x: number; y: number };
+  onStateChange?: (event: GameStateEvent) => void;
+}
 
 export class VillageScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
@@ -21,6 +26,8 @@ export class VillageScene extends Phaser.Scene {
   private activeInteraction: InteractionPoint | null = null;
   private chestSprite?: Phaser.GameObjects.Image;
   private chestOpened = false;
+  private initialSpawnPos: { x: number; y: number } = { x: 336, y: 350 };
+  private isTransitioning = false;
 
   // World size: 1920 x 1440
   public static readonly WORLD_WIDTH = 1920;
@@ -123,23 +130,26 @@ export class VillageScene extends Phaser.Scene {
     super({ key: 'VillageScene' });
   }
 
-  public init(data: { onStateChange?: (event: GameStateEvent) => void }) {
-    this.onStateChange = data.onStateChange;
+  public init(data: VillageSceneInitData) {
+    if (data.returnPos) {
+      this.initialSpawnPos = data.returnPos;
+    }
+    if (data.onStateChange) {
+      this.onStateChange = data.onStateChange;
+    }
+    this.isTransitioning = false;
   }
 
   preload() {
-    // 1. Tilemap and base tileset
     this.load.tilemapTiledJSON('village_map', '/assets/maps/village.json');
     this.load.image('serene_village', '/assets/tilesets/serene_village_32x32.png');
 
-    // 2. Crop plants & farm objects
     this.load.spritesheet('farm_plants', '/assets/tilesets/farm_plants.png', {
       frameWidth: 16,
       frameHeight: 16,
     });
     this.load.image('farm_objects', '/assets/tilesets/farm_objects.png');
 
-    // 3. Complete standalone building sprites (96x128 each)
     this.load.image('building_main_house', '/assets/buildings/main_house.png');
     this.load.image('building_hospital', '/assets/buildings/hospital.png');
     this.load.image('building_shop', '/assets/buildings/shop.png');
@@ -150,7 +160,6 @@ export class VillageScene extends Phaser.Scene {
     this.load.image('prop_chest', '/assets/buildings/chest.png');
     this.load.image('village_fountain', '/assets/buildings/village_fountain.png');
 
-    // 4. Player character ONLY
     this.load.spritesheet('player', '/assets/characters/player.png', {
       frameWidth: 32,
       frameHeight: 32,
@@ -161,8 +170,8 @@ export class VillageScene extends Phaser.Scene {
     const W = VillageScene.WORLD_WIDTH;
     const H = VillageScene.WORLD_HEIGHT;
 
-    // Set background color to exact meadow grass green so zero black space appears anywhere
     this.cameras.main.setBackgroundColor('#79C867');
+    this.cameras.main.fadeIn(250, 15, 23, 18);
     this.physics.world.setBounds(0, 0, W, H);
 
     // 1. Create Tilemap
@@ -186,7 +195,7 @@ export class VillageScene extends Phaser.Scene {
     // 2. Obstacle Static Group
     this.obstacleGroup = this.physics.add.staticGroup();
 
-    // 3. Spawn Buildings (96x128 complete standalone houses)
+    // 3. Spawn Buildings
     this.spawnBuildings();
 
     // 4. Spawn Central Plaza Fountain & Water Ripples
@@ -207,8 +216,8 @@ export class VillageScene extends Phaser.Scene {
     // 9. Setup Interaction Points
     this.setupInteractionPoints();
 
-    // 10. Spawn Player Character (spawn outside player house at x: 336, y: 350)
-    this.spawnPlayer();
+    // 10. Spawn Player Character at initialSpawnPos
+    this.spawnPlayer(this.initialSpawnPos.x, this.initialSpawnPos.y);
 
     // 11. Add Colliders
     const collLayer = map.getLayer('Collision')?.tilemapLayer;
@@ -223,7 +232,6 @@ export class VillageScene extends Phaser.Scene {
     // 13. Setup Input
     this.setupInputs();
 
-    // 14. Responsive window resize handler
     this.scale.on('resize', this.handleResize, this);
   }
 
@@ -301,7 +309,6 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnCentralPlaza() {
-    // Village Central Fountain (64x64 pixel art stone fountain) at x: 944, y: 608
     const fountain = this.add.image(944, 608, 'village_fountain').setOrigin(0.5, 0.5);
     fountain.setDepth(608 + 20);
 
@@ -311,7 +318,6 @@ export class VillageScene extends Phaser.Scene {
 
     this.addMarkerLabel(944, 560, 'Kaveripura Fountain', '#75B9D0');
 
-    // Water ripple effect in fountain basin
     const circle = this.add.circle(944, 608, 12, 0x75b9d0, 0.4);
     circle.setDepth(608 + 21);
     this.tweens.add({
@@ -326,7 +332,6 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnFarmland() {
-    // Crop fields at x: 500..740, y: 780..980
     const cropTypes = [0, 1, 2, 8, 9, 10, 16, 17];
     for (let row = 0; row < 6; row++) {
       for (let col = 0; col < 8; col++) {
@@ -343,13 +348,10 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnPond() {
-    // Lotus pond at x: 192..512, y: 1088..1280
-    // Wooden pier / dock: x: 530, y: 1200
     const dock = this.add.rectangle(520, 1200, 56, 20, 0x8b5a2b);
     dock.setStrokeStyle(2, 0x5c3a1e);
     dock.setDepth(1201);
 
-    // Lily pad circles on pond water
     const lilyPads = [
       { x: 260, y: 1140 },
       { x: 380, y: 1180 },
@@ -375,7 +377,6 @@ export class VillageScene extends Phaser.Scene {
 
   private spawnTreesAndFoliage() {
     const treePositions = [
-      // North forest edge
       { x: 100, y: 70 },
       { x: 200, y: 65 },
       { x: 480, y: 65 },
@@ -386,7 +387,6 @@ export class VillageScene extends Phaser.Scene {
       { x: 1420, y: 70 },
       { x: 1700, y: 65 },
       { x: 1820, y: 70 },
-      // West perimeter
       { x: 60, y: 200 },
       { x: 60, y: 360 },
       { x: 60, y: 520 },
@@ -395,7 +395,6 @@ export class VillageScene extends Phaser.Scene {
       { x: 60, y: 1000 },
       { x: 60, y: 1160 },
       { x: 60, y: 1320 },
-      // East perimeter
       { x: 1860, y: 200 },
       { x: 1860, y: 360 },
       { x: 1860, y: 520 },
@@ -404,7 +403,6 @@ export class VillageScene extends Phaser.Scene {
       { x: 1860, y: 1000 },
       { x: 1860, y: 1160 },
       { x: 1860, y: 1320 },
-      // South boundary & grove
       { x: 600, y: 1390 },
       { x: 740, y: 1390 },
       { x: 880, y: 1390 },
@@ -414,10 +412,8 @@ export class VillageScene extends Phaser.Scene {
       { x: 1440, y: 1390 },
       { x: 1580, y: 1390 },
       { x: 1720, y: 1390 },
-      // Pond side trees
       { x: 120, y: 1020 },
       { x: 550, y: 1270 },
-      // Secret east grove
       { x: 1720, y: 1240 },
       { x: 1820, y: 1220 },
     ];
@@ -457,45 +453,49 @@ export class VillageScene extends Phaser.Scene {
         id: 'door_player_home',
         name: "Player's Cottage",
         type: 'door',
+        targetInterior: 'player_home',
         x: 336,
         y: 290,
         radius: 46,
         title: "Kushal's Cottage",
-        description: 'Your home in Kaveripura. Clean, warm, and stocked with daily essentials. Ready for interior level load in next phase.',
-        actionLabel: 'Knock / Enter',
+        description: 'Your home in Kaveripura. Clean, warm, and stocked with daily essentials. Step inside to relax by the hearth.',
+        actionLabel: 'Enter House',
       },
       {
         id: 'door_hospital',
         name: 'Village Clinic',
         type: 'door',
+        targetInterior: 'hospital',
         x: 720,
         y: 290,
         radius: 48,
         title: "Dr. Priya's Health Clinic",
         description: 'Village healthcare center. Priya prepares herbal compresses and medical care for the recovering community.',
-        actionLabel: 'Visit Clinic',
+        actionLabel: 'Enter Clinic',
       },
       {
         id: 'door_shop',
         name: "Dev's General Store",
         type: 'door',
+        targetInterior: 'shop',
         x: 1168,
         y: 290,
         radius: 46,
         title: "Dev's Provisions",
-        description: 'Dry goods, salt, tools, and grain sacks. Dev trades with merchants from neighboring villages.',
-        actionLabel: 'Inspect Storefront',
+        description: 'Dry goods, salt, tools, and grain sacks. Step inside to browse store shelves and trade ledgers.',
+        actionLabel: 'Enter Store',
       },
       {
         id: 'door_workshop',
         name: "Arjun's Workshop",
         type: 'door',
+        targetInterior: 'workshop',
         x: 1552,
         y: 290,
         radius: 48,
         title: "Arjun's Mechanic Garage",
-        description: 'Sparks fly from metal fabrication tools. Arjun maintains irrigation pumps, generators, and vehicle motors.',
-        actionLabel: 'Visit Workshop',
+        description: 'Sparks fly from metal fabrication tools. Enter the workshop to inspect machine parts and the generator.',
+        actionLabel: 'Enter Workshop',
       },
       {
         id: 'door_farm_barn',
@@ -555,43 +555,44 @@ export class VillageScene extends Phaser.Scene {
     ];
   }
 
-  private spawnPlayer() {
-    // Spawn player outside player's house on the stone path
-    this.player = this.physics.add.sprite(336, 350, 'player', 1);
+  private spawnPlayer(x: number, y: number) {
+    this.player = this.physics.add.sprite(x, y, 'player', 1);
     this.player.setOrigin(0.5, 0.7);
     this.player.body?.setSize(16, 16);
     this.player.body?.setOffset(8, 16);
     this.player.setCollideWorldBounds(true);
-    this.player.setDepth(350);
+    this.player.setDepth(y);
 
     // 4-Directional Walk Animations
-    this.anims.create({
-      key: 'player-walk-down',
-      frames: this.anims.generateFrameNumbers('player', { frames: [0, 1, 2, 1] }),
-      frameRate: 8,
-      repeat: -1,
-    });
+    if (!this.anims.exists('player-walk-down')) {
+      this.anims.create({
+        key: 'player-walk-down',
+        frames: this.anims.generateFrameNumbers('player', { frames: [0, 1, 2, 1] }),
+        frameRate: 8,
+        repeat: -1,
+      });
 
-    this.anims.create({
-      key: 'player-walk-left',
-      frames: this.anims.generateFrameNumbers('player', { frames: [3, 4, 5, 4] }),
-      frameRate: 8,
-      repeat: -1,
-    });
+      this.anims.create({
+        key: 'player-walk-left',
+        frames: this.anims.generateFrameNumbers('player', { frames: [3, 4, 5, 4] }),
+        frameRate: 8,
+        repeat: -1,
+      });
 
-    this.anims.create({
-      key: 'player-walk-right',
-      frames: this.anims.generateFrameNumbers('player', { frames: [6, 7, 8, 7] }),
-      frameRate: 8,
-      repeat: -1,
-    });
+      this.anims.create({
+        key: 'player-walk-right',
+        frames: this.anims.generateFrameNumbers('player', { frames: [6, 7, 8, 7] }),
+        frameRate: 8,
+        repeat: -1,
+      });
 
-    this.anims.create({
-      key: 'player-walk-up',
-      frames: this.anims.generateFrameNumbers('player', { frames: [9, 10, 11, 10] }),
-      frameRate: 8,
-      repeat: -1,
-    });
+      this.anims.create({
+        key: 'player-walk-up',
+        frames: this.anims.generateFrameNumbers('player', { frames: [9, 10, 11, 10] }),
+        frameRate: 8,
+        repeat: -1,
+      });
+    }
 
     this.player.setFrame(1);
   }
@@ -626,6 +627,13 @@ export class VillageScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-SPACE', () => {
       this.triggerActiveInteraction();
     });
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.input.keyboard?.off('keydown-Z');
+      this.input.keyboard?.off('keydown-E');
+      this.input.keyboard?.off('keydown-SPACE');
+      this.scale.off('resize', this.handleResize, this);
+    });
   }
 
   public cycleZoom() {
@@ -642,7 +650,13 @@ export class VillageScene extends Phaser.Scene {
   }
 
   public triggerActiveInteraction() {
-    if (!this.activeInteraction) return;
+    if (!this.activeInteraction || this.isTransitioning) return;
+
+    // Check if entering a building interior
+    if (this.activeInteraction.type === 'door' && this.activeInteraction.targetInterior) {
+      this.enterBuilding(this.activeInteraction.targetInterior);
+      return;
+    }
 
     if (this.activeInteraction.id === 'secret_chest' && !this.chestOpened) {
       this.chestOpened = true;
@@ -673,8 +687,26 @@ export class VillageScene extends Phaser.Scene {
         isMoving: false,
         isSprinting: false,
         activeInteraction: { ...this.activeInteraction },
+        isInsideInterior: false,
+        interiorId: null,
       });
     }
+  }
+
+  public enterBuilding(buildingId: InteriorType) {
+    if (this.isTransitioning) return;
+    this.isTransitioning = true;
+
+    sound.playFootstep();
+    this.cameras.main.fadeOut(200, 15, 23, 18);
+
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('InteriorScene', {
+        buildingId,
+        returnPos: { x: this.player.x, y: this.player.y + 16 },
+        onStateChange: this.onStateChange,
+      });
+    });
   }
 
   private getCurrentZoneName(): string {
@@ -689,7 +721,7 @@ export class VillageScene extends Phaser.Scene {
   }
 
   update() {
-    if (!this.player || !this.player.body) return;
+    if (!this.player || !this.player.body || this.isTransitioning) return;
 
     let vx = 0;
     let vy = 0;
@@ -755,10 +787,8 @@ export class VillageScene extends Phaser.Scene {
       }
     }
 
-    // Depth sorting
     this.player.setDepth(this.player.y);
 
-    // Interaction checks
     let nearest: InteractionPoint | null = null;
     let minDistance = 999999;
 
@@ -785,6 +815,8 @@ export class VillageScene extends Phaser.Scene {
         isMoving,
         isSprinting,
         activeInteraction: this.activeInteraction ? { ...this.activeInteraction } : null,
+        isInsideInterior: false,
+        interiorId: null,
       });
     }
   }

@@ -43,12 +43,19 @@ export default function GameTestingCanvas() {
 
   const handleStateChange = useCallback((event: GameStateEvent) => {
     setGameState((prev) => {
+      if (event.isInsideInterior !== prev.isInsideInterior) {
+        setShowMinimap(false);
+        setInspectModal(null);
+      }
+
       if (
         prev.playerX === event.playerX &&
         prev.playerY === event.playerY &&
         prev.currentZone === event.currentZone &&
         prev.isMoving === event.isMoving &&
         prev.isSprinting === event.isSprinting &&
+        prev.isInsideInterior === event.isInsideInterior &&
+        prev.interiorId === event.interiorId &&
         prev.activeInteraction?.id === event.activeInteraction?.id &&
         prev.activeInteraction?.opened === event.activeInteraction?.opened
       ) {
@@ -86,14 +93,24 @@ export default function GameTestingCanvas() {
 
   const handleTriggerInteraction = () => {
     if (gameState.activeInteraction) {
+      const isDoor =
+        gameState.activeInteraction.type === 'door' &&
+        Boolean(gameState.activeInteraction.targetInterior);
+      const isExit = gameState.activeInteraction.type === 'exit_door';
+
       gameRef.current?.triggerInteraction();
-      setInspectModal(gameState.activeInteraction);
+
+      if (!isDoor && !isExit) {
+        setInspectModal(gameState.activeInteraction);
+      } else {
+        setInspectModal(null);
+      }
     }
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'm' || e.key === 'M') {
+      if ((e.key === 'm' || e.key === 'M') && !gameState.isInsideInterior) {
         setShowMinimap((prev) => !prev);
       }
       if (e.key === 'h' || e.key === 'H') {
@@ -101,7 +118,15 @@ export default function GameTestingCanvas() {
       }
       if (e.key === 'e' || e.key === 'E') {
         if (gameState.activeInteraction) {
-          setInspectModal(gameState.activeInteraction);
+          const isDoor =
+            gameState.activeInteraction.type === 'door' &&
+            Boolean(gameState.activeInteraction.targetInterior);
+          const isExit = gameState.activeInteraction.type === 'exit_door';
+          if (!isDoor && !isExit) {
+            setInspectModal(gameState.activeInteraction);
+          } else {
+            setInspectModal(null);
+          }
         }
       }
       if (e.key === 'Escape') {
@@ -113,7 +138,7 @@ export default function GameTestingCanvas() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState.activeInteraction]);
+  }, [gameState.activeInteraction, gameState.isInsideInterior]);
 
   // Mini-map coordinates scaling (1920x1440 map -> 280x210 minimap)
   const mapWidth = 1920;
@@ -177,6 +202,19 @@ export default function GameTestingCanvas() {
               <span>{gameState.isSprinting ? 'SPRINT' : 'WALK'}</span>
             </div>
           )}
+
+          {gameState.isInsideInterior && (
+            <>
+              <div className="h-3 w-px bg-[#28392E]" />
+              <button
+                onClick={() => gameRef.current?.exitInterior()}
+                className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded bg-[#E98F9F]/20 hover:bg-[#E98F9F]/40 border border-[#E98F9F]/60 text-[#FFF8E9] font-pixel transition cursor-pointer"
+                title="Return outside to village square"
+              >
+                <span>🚪 Exit to Village</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* Right: Quick Action Controls Pill */}
@@ -193,10 +231,21 @@ export default function GameTestingCanvas() {
 
           {/* Minimap Toggle */}
           <button
-            onClick={() => setShowMinimap((prev) => !prev)}
-            title="Toggle Minimap (Key: M)"
+            onClick={() => {
+              if (!gameState.isInsideInterior) {
+                setShowMinimap((prev) => !prev);
+              }
+            }}
+            disabled={gameState.isInsideInterior}
+            title={
+              gameState.isInsideInterior
+                ? 'Minimap (Village Exterior Only)'
+                : 'Toggle Minimap (Key: M)'
+            }
             className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded border transition font-pixel ${
-              showMinimap
+              gameState.isInsideInterior
+                ? 'opacity-40 cursor-not-allowed bg-[#1F3B27] border-[#28392E] text-stone-400'
+                : showMinimap
                 ? 'bg-[#315B3C] border-[#78A85B] text-[#F4D477]'
                 : 'bg-[#1F3B27] border-[#28392E] text-[#FFF8E9] hover:bg-[#315B3C]'
             }`}
@@ -243,7 +292,12 @@ export default function GameTestingCanvas() {
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 animate-bounce">
           <button
             onClick={handleTriggerInteraction}
-            className="px-4 py-2 bg-[#14271A]/95 border-2 border-[#F4D477] rounded-lg shadow-2xl flex items-center gap-2.5 text-sm font-pixel text-[#FFF8E9] hover:bg-[#1F3B27] transition"
+            className={`px-4 py-2 bg-[#14271A]/95 border-2 rounded-lg shadow-2xl flex items-center gap-2.5 text-sm font-pixel transition ${
+              gameState.activeInteraction.type === 'door' ||
+              gameState.activeInteraction.type === 'exit_door'
+                ? 'border-[#93C476] text-[#FFF8E9] hover:bg-[#1F3B27] ring-2 ring-[#78A85B]/50'
+                : 'border-[#F4D477] text-[#FFF8E9] hover:bg-[#1F3B27]'
+            }`}
           >
             <span className="w-6 h-6 rounded bg-[#F4D477] text-[#0F1712] font-bold flex items-center justify-center text-xs">
               E
@@ -260,7 +314,7 @@ export default function GameTestingCanvas() {
       {/* 4. CONTROLS HELPER (Bottom-left overlay) */}
       <div className="hidden lg:block absolute bottom-4 left-4 z-20 bg-[#0F1712]/85 backdrop-blur-sm border border-[#28392E] rounded-md p-2.5 text-[11px] text-[#F3F4F1]/80 max-w-xs pointer-events-none shadow-xl">
         <div className="font-pixel text-[#F4D477] mb-1 font-bold flex items-center gap-1">
-          <span>VILLAGE ROAM CONTROLS</span>
+          <span>{gameState.isInsideInterior ? 'ROOM CONTROLS' : 'VILLAGE ROAM CONTROLS'}</span>
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
           <div>
@@ -270,13 +324,17 @@ export default function GameTestingCanvas() {
             <span className="text-[#93C476] font-mono">Shift</span>: Sprint
           </div>
           <div>
-            <span className="text-[#93C476] font-mono">E / Space</span>: Interact
+            <span className="text-[#93C476] font-mono">E / Space</span>:{' '}
+            {gameState.isInsideInterior ? 'Inspect / Leave' : 'Interact'}
           </div>
           <div>
             <span className="text-[#93C476] font-mono">Z</span>: Zoom ({zoomLevel.toFixed(1)}x)
           </div>
           <div>
-            <span className="text-[#93C476] font-mono">M</span>: Village Map
+            <span className="text-[#93C476] font-mono">
+              {gameState.isInsideInterior ? 'Doormat' : 'M'}
+            </span>
+            : {gameState.isInsideInterior ? 'Walk out' : 'Village Map'}
           </div>
           <div>
             <span className="text-[#93C476] font-mono">Esc</span>: Close Modals

@@ -1,7 +1,9 @@
+export type InteriorType = 'player_home' | 'hospital' | 'shop' | 'workshop';
+
 export interface InteractionPoint {
   id: string;
   name: string;
-  type: 'door' | 'inspect' | 'chest' | 'resource' | 'sign';
+  type: 'door' | 'exit_door' | 'inspect' | 'chest' | 'resource' | 'sign';
   x: number;
   y: number;
   radius: number;
@@ -9,6 +11,7 @@ export interface InteractionPoint {
   description: string;
   actionLabel?: string;
   opened?: boolean;
+  targetInterior?: InteriorType;
 }
 
 export interface LocationZone {
@@ -28,4 +31,6 @@ export interface GameStateEvent {
   isMoving: boolean;
   isSprinting: boolean;
   activeInteraction: InteractionPoint | null;
+  isInsideInterior?: boolean;
+  interiorId?: InteriorType | null;
 }

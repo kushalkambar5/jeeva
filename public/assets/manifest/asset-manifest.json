@@ -107,6 +107,30 @@
     "shop_props": {
       "key": "shop_props",
       "url": "/assets/interiors/shop_props.png"
+    },
+    "room_player_home": {
+      "key": "room_player_home",
+      "url": "/assets/interiors/room_player_home.png",
+      "width": 512,
+      "height": 384
+    },
+    "room_hospital": {
+      "key": "room_hospital",
+      "url": "/assets/interiors/room_hospital.png",
+      "width": 512,
+      "height": 384
+    },
+    "room_shop": {
+      "key": "room_shop",
+      "url": "/assets/interiors/room_shop.png",
+      "width": 512,
+      "height": 384
+    },
+    "room_workshop": {
+      "key": "room_workshop",
+      "url": "/assets/interiors/room_workshop.png",
+      "width": 800,
+      "height": 512
     }
   },
   "characters": {
