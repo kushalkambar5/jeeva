@@ -376,55 +376,269 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnTreesAndFoliage() {
-    const treePositions = [
-      { x: 100, y: 70 },
-      { x: 200, y: 65 },
-      { x: 480, y: 65 },
-      { x: 580, y: 70 },
-      { x: 860, y: 65 },
-      { x: 960, y: 70 },
-      { x: 1320, y: 65 },
-      { x: 1420, y: 70 },
-      { x: 1700, y: 65 },
-      { x: 1820, y: 70 },
-      { x: 60, y: 200 },
-      { x: 60, y: 360 },
-      { x: 60, y: 520 },
-      { x: 60, y: 680 },
-      { x: 60, y: 840 },
-      { x: 60, y: 1000 },
-      { x: 60, y: 1160 },
-      { x: 60, y: 1320 },
-      { x: 1860, y: 200 },
-      { x: 1860, y: 360 },
-      { x: 1860, y: 520 },
-      { x: 1860, y: 680 },
-      { x: 1860, y: 840 },
-      { x: 1860, y: 1000 },
-      { x: 1860, y: 1160 },
-      { x: 1860, y: 1320 },
-      { x: 600, y: 1390 },
-      { x: 740, y: 1390 },
-      { x: 880, y: 1390 },
-      { x: 1020, y: 1390 },
-      { x: 1160, y: 1390 },
-      { x: 1300, y: 1390 },
-      { x: 1440, y: 1390 },
-      { x: 1580, y: 1390 },
-      { x: 1720, y: 1390 },
-      { x: 120, y: 1020 },
-      { x: 550, y: 1270 },
-      { x: 1720, y: 1240 },
-      { x: 1820, y: 1220 },
+    interface TreePlacement {
+      x: number;
+      y: number;
+      scale?: number;
+    }
+
+    const treePositions: TreePlacement[] = [
+      // 1. Perimeter Borders
+      { x: 100, y: 70, scale: 1.05 },
+      { x: 200, y: 65, scale: 0.95 },
+      { x: 480, y: 65, scale: 1.1 },
+      { x: 580, y: 70, scale: 1.0 },
+      { x: 860, y: 65, scale: 0.9 },
+      { x: 960, y: 70, scale: 1.15 },
+      { x: 1320, y: 65, scale: 1.0 },
+      { x: 1420, y: 70, scale: 1.05 },
+      { x: 1700, y: 65, scale: 0.95 },
+      { x: 1820, y: 70, scale: 1.1 },
+      { x: 60, y: 200, scale: 1.05 },
+      { x: 60, y: 360, scale: 1.15 },
+      { x: 60, y: 520, scale: 0.95 },
+      { x: 60, y: 680, scale: 1.1 },
+      { x: 60, y: 840, scale: 1.0 },
+      { x: 60, y: 1000, scale: 1.15 },
+      { x: 60, y: 1160, scale: 0.9 },
+      { x: 60, y: 1320, scale: 1.1 },
+      { x: 1860, y: 200, scale: 1.1 },
+      { x: 1860, y: 360, scale: 0.95 },
+      { x: 1860, y: 520, scale: 1.2 },
+      { x: 1860, y: 680, scale: 1.05 },
+      { x: 1860, y: 840, scale: 0.9 },
+      { x: 1860, y: 1000, scale: 1.15 },
+      { x: 1860, y: 1160, scale: 1.0 },
+      { x: 1860, y: 1320, scale: 1.2 },
+      { x: 600, y: 1390, scale: 1.05 },
+      { x: 740, y: 1390, scale: 0.95 },
+      { x: 880, y: 1390, scale: 1.15 },
+      { x: 1020, y: 1390, scale: 1.0 },
+      { x: 1160, y: 1390, scale: 0.9 },
+      { x: 1300, y: 1390, scale: 1.1 },
+      { x: 1440, y: 1390, scale: 1.05 },
+      { x: 1580, y: 1390, scale: 0.95 },
+      { x: 1720, y: 1390, scale: 1.2 },
+
+      // 2. West Cottage Orchard (Lawns West of Player's Cottage)
+      { x: 150, y: 160, scale: 1.05 },
+      { x: 230, y: 180, scale: 0.95 },
+      { x: 140, y: 280, scale: 1.1 },
+      { x: 220, y: 310, scale: 0.85 },
+      { x: 150, y: 420, scale: 1.0 },
+      { x: 230, y: 450, scale: 0.9 },
+      { x: 170, y: 520, scale: 1.15 },
+
+      // 3. Clinic Meadows (Grounds between Player's Cottage & Clinic)
+      { x: 450, y: 180, scale: 1.1 },
+      { x: 530, y: 150, scale: 0.9 },
+      { x: 610, y: 190, scale: 1.05 },
+      { x: 460, y: 290, scale: 0.85 },
+      { x: 540, y: 330, scale: 1.2 },
+      { x: 620, y: 310, scale: 0.95 },
+      { x: 470, y: 430, scale: 1.05 },
+      { x: 550, y: 470, scale: 1.15 },
+      { x: 620, y: 440, scale: 0.9 },
+
+      // 4. Market Green (Grounds between Clinic & Dev's General Store)
+      { x: 820, y: 170, scale: 1.05 },
+      { x: 900, y: 150, scale: 1.15 },
+      { x: 990, y: 170, scale: 0.9 },
+      { x: 1070, y: 190, scale: 1.05 },
+      { x: 830, y: 280, scale: 0.9 },
+      { x: 910, y: 320, scale: 1.2 },
+      { x: 1000, y: 300, scale: 0.85 },
+      { x: 1070, y: 330, scale: 1.1 },
+      { x: 830, y: 440, scale: 1.15 },
+      { x: 910, y: 470, scale: 0.95 },
+      { x: 1010, y: 450, scale: 1.2 },
+      { x: 1070, y: 480, scale: 0.9 },
+
+      // 5. Workshop Grounds (Between General Store & Mechanic Workshop)
+      { x: 1270, y: 180, scale: 1.1 },
+      { x: 1350, y: 160, scale: 0.95 },
+      { x: 1430, y: 200, scale: 1.05 },
+      { x: 1280, y: 300, scale: 0.9 },
+      { x: 1360, y: 330, scale: 1.2 },
+      { x: 1440, y: 310, scale: 0.85 },
+      { x: 1280, y: 440, scale: 1.15 },
+      { x: 1360, y: 470, scale: 0.95 },
+      { x: 1440, y: 450, scale: 1.1 },
+
+      // 6. East Pasture (Grounds East of Mechanic Workshop)
+      { x: 1660, y: 180, scale: 1.05 },
+      { x: 1740, y: 220, scale: 1.15 },
+      { x: 1670, y: 310, scale: 0.9 },
+      { x: 1750, y: 350, scale: 1.1 },
+      { x: 1680, y: 450, scale: 1.2 },
+      { x: 1760, y: 480, scale: 0.95 },
+
+      // 7. Central Highway & Plaza Shaded Lawns (South of Road)
+      { x: 200, y: 700, scale: 1.1 },
+      { x: 420, y: 690, scale: 1.05 },
+      { x: 820, y: 700, scale: 1.1 },
+      { x: 900, y: 720, scale: 0.95 },
+      { x: 990, y: 720, scale: 0.95 },
+      { x: 1070, y: 700, scale: 1.15 },
+      { x: 1230, y: 690, scale: 1.05 },
+      { x: 1340, y: 710, scale: 0.9 },
+      { x: 1580, y: 700, scale: 1.15 },
+      { x: 1700, y: 710, scale: 1.0 },
+
+      // 8. Farm & Barn Surroundings
+      { x: 200, y: 810, scale: 1.05 },
+      { x: 200, y: 930, scale: 1.15 },
+      { x: 200, y: 1010, scale: 0.9 },
+      { x: 440, y: 800, scale: 0.85 },
+      { x: 440, y: 920, scale: 1.1 },
+      { x: 440, y: 1010, scale: 0.95 },
+
+      // 9. Central Agricultural Grasslands (Between Crops & Guard Station)
+      { x: 820, y: 810, scale: 1.15 },
+      { x: 900, y: 840, scale: 0.95 },
+      { x: 820, y: 920, scale: 0.9 },
+      { x: 890, y: 960, scale: 1.2 },
+      { x: 830, y: 1040, scale: 1.05 },
+      { x: 1080, y: 800, scale: 1.1 },
+      { x: 1170, y: 830, scale: 0.9 },
+      { x: 1260, y: 810, scale: 1.15 },
+      { x: 1100, y: 920, scale: 0.95 },
+      { x: 1180, y: 950, scale: 1.2 },
+      { x: 1270, y: 920, scale: 0.9 },
+      { x: 1100, y: 1040, scale: 1.1 },
+      { x: 1200, y: 1050, scale: 0.95 },
+      { x: 1280, y: 1030, scale: 1.15 },
+
+      // 10. Lotus Pond Shoreline (Natural Lakeside Ring)
+      { x: 140, y: 1060, scale: 1.1 },
+      { x: 240, y: 1040, scale: 0.95 },
+      { x: 340, y: 1040, scale: 1.15 },
+      { x: 440, y: 1040, scale: 0.9 },
+      { x: 560, y: 1080, scale: 1.1 },
+      { x: 580, y: 1160, scale: 0.95 },
+      { x: 580, y: 1260, scale: 1.2 },
+      { x: 560, y: 1340, scale: 0.9 },
+      { x: 460, y: 1360, scale: 1.15 },
+      { x: 340, y: 1360, scale: 0.9 },
+      { x: 220, y: 1360, scale: 1.05 },
+      { x: 140, y: 1260, scale: 1.2 },
+      { x: 130, y: 1160, scale: 0.95 },
+
+      // 11. South Valley Meadows (Between Pond & Ancient Grove)
+      { x: 680, y: 1130, scale: 1.1 },
+      { x: 760, y: 1160, scale: 0.9 },
+      { x: 690, y: 1240, scale: 1.2 },
+      { x: 760, y: 1290, scale: 0.95 },
+      { x: 680, y: 1350, scale: 1.05 },
+      { x: 870, y: 1140, scale: 1.15 },
+      { x: 950, y: 1170, scale: 0.9 },
+      { x: 880, y: 1250, scale: 1.2 },
+      { x: 960, y: 1290, scale: 0.85 },
+      { x: 890, y: 1360, scale: 1.1 },
+      { x: 1060, y: 1140, scale: 1.05 },
+      { x: 1140, y: 1170, scale: 1.2 },
+      { x: 1070, y: 1260, scale: 0.9 },
+      { x: 1150, y: 1300, scale: 1.15 },
+      { x: 1080, y: 1370, scale: 0.95 },
+      { x: 1260, y: 1140, scale: 1.2 },
+      { x: 1340, y: 1170, scale: 0.9 },
+      { x: 1270, y: 1260, scale: 1.1 },
+      { x: 1350, y: 1300, scale: 0.95 },
+      { x: 1280, y: 1370, scale: 1.15 },
+      { x: 1440, y: 1140, scale: 1.05 },
+      { x: 1520, y: 1180, scale: 1.2 },
+      { x: 1450, y: 1270, scale: 0.9 },
+      { x: 1530, y: 1310, scale: 1.15 },
+      { x: 1460, y: 1370, scale: 0.95 },
+
+      // 12. Whispering Oak Grove (Dense Sanctuary surrounding Secret Chest)
+      { x: 1630, y: 1120, scale: 1.2 },
+      { x: 1710, y: 1100, scale: 1.1 },
+      { x: 1790, y: 1120, scale: 1.25 },
+      { x: 1640, y: 1210, scale: 1.05 },
+      { x: 1720, y: 1200, scale: 1.2 },
+      { x: 1820, y: 1210, scale: 1.15 },
+      { x: 1630, y: 1310, scale: 1.2 },
+      { x: 1710, y: 1330, scale: 1.15 },
+      { x: 1830, y: 1320, scale: 1.25 },
     ];
 
     treePositions.forEach((pos) => {
-      const tree = this.add.image(pos.x, pos.y, 'prop_oak_tree').setOrigin(0.5, 0.5);
-      tree.setDepth(pos.y + 35);
+      const scale = pos.scale ?? 1.0;
 
-      const collider = this.obstacleGroup.create(pos.x, pos.y + 24, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-      collider.setCircle(14, -14, -14);
+      // Soft grounding drop shadow beneath trunk
+      const shadow = this.add.ellipse(
+        pos.x,
+        pos.y + 28 * scale,
+        38 * scale,
+        14 * scale,
+        0x14271a,
+        0.3
+      );
+      shadow.setDepth(pos.y + 5);
+
+      // Lush Oak Tree Sprite
+      const tree = this.add.image(pos.x, pos.y, 'prop_oak_tree').setOrigin(0.5, 0.5);
+      tree.setScale(scale);
+      tree.setDepth(pos.y + 35 * scale);
+
+      // Gentle wind breeze sway
+      const swayDuration = 2200 + ((pos.x * 13 + pos.y * 19) % 800);
+      this.tweens.add({
+        targets: tree,
+        angle: { from: -1.2, to: 1.2 },
+        duration: swayDuration,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      // Circular trunk physics obstacle
+      const collider = this.obstacleGroup.create(
+        pos.x,
+        pos.y + 24 * scale,
+        undefined,
+        undefined,
+        false
+      ) as Phaser.Physics.Arcade.Sprite;
+      collider.setCircle(13 * scale, -13 * scale, -13 * scale);
       collider.setVisible(false);
+    });
+
+    // Decorative Wildflower & Clover Patches scattered in the open grounds
+    const flowerPatches = [
+      { x: 180, y: 220, frame: 1 },
+      { x: 200, y: 380, frame: 2 },
+      { x: 500, y: 240, frame: 8 },
+      { x: 580, y: 380, frame: 9 },
+      { x: 860, y: 220, frame: 0 },
+      { x: 1040, y: 260, frame: 16 },
+      { x: 950, y: 400, frame: 17 },
+      { x: 1310, y: 240, frame: 1 },
+      { x: 1400, y: 390, frame: 2 },
+      { x: 1710, y: 260, frame: 8 },
+      { x: 260, y: 730, frame: 9 },
+      { x: 860, y: 730, frame: 0 },
+      { x: 1120, y: 720, frame: 16 },
+      { x: 1640, y: 730, frame: 17 },
+      { x: 860, y: 880, frame: 1 },
+      { x: 1140, y: 880, frame: 2 },
+      { x: 1230, y: 990, frame: 8 },
+      { x: 720, y: 1200, frame: 9 },
+      { x: 910, y: 1200, frame: 0 },
+      { x: 1110, y: 1210, frame: 16 },
+      { x: 1310, y: 1220, frame: 17 },
+      { x: 1490, y: 1230, frame: 1 },
+      { x: 820, y: 1320, frame: 2 },
+      { x: 1010, y: 1330, frame: 8 },
+      { x: 1220, y: 1330, frame: 9 },
+      { x: 1400, y: 1340, frame: 0 },
+    ];
+
+    flowerPatches.forEach((f) => {
+      const plant = this.add.sprite(f.x, f.y, 'farm_plants', f.frame);
+      plant.setScale(1.2);
+      plant.setDepth(f.y);
     });
   }
 
