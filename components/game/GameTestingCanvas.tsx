@@ -33,6 +33,7 @@ import { GameStateEvent, InteractionPoint, NPCWorldState } from './types';
 import { sound } from './audio';
 import PixelSprite from '../PixelSprite';
 import { formatMinutesToTime, timeStringToMinutes } from './npcData';
+import NPCDialogueModal from './NPCDialogueModal';
 
 export default function GameTestingCanvas() {
   const gameRef = useRef<PhaserGameRef>(null);
@@ -51,6 +52,7 @@ export default function GameTestingCanvas() {
   });
 
   const [inspectModal, setInspectModal] = useState<InteractionPoint | null>(null);
+  const [talkingNpc, setTalkingNpc] = useState<NPCWorldState | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1.6);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -65,6 +67,7 @@ export default function GameTestingCanvas() {
       if (event.isInsideInterior !== prev.isInsideInterior) {
         setShowMinimap(false);
         setInspectModal(null);
+        setTalkingNpc(null);
       }
       return event;
     });
@@ -109,10 +112,15 @@ export default function GameTestingCanvas() {
 
       gameRef.current?.triggerInteraction();
 
-      if (!isDoor && !isExit) {
+      if (gameState.activeInteraction.type === 'npc' && gameState.activeInteraction.npcData) {
+        setTalkingNpc(gameState.activeInteraction.npcData);
+        setInspectModal(null);
+      } else if (!isDoor && !isExit) {
         setInspectModal(gameState.activeInteraction);
+        setTalkingNpc(null);
       } else {
         setInspectModal(null);
+        setTalkingNpc(null);
       }
     }
   };
@@ -144,6 +152,15 @@ export default function GameTestingCanvas() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept game hotkeys if the user is typing in a text field
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (targetTag === 'input' || targetTag === 'textarea') {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement).blur();
+        }
+        return;
+      }
+
       if ((e.key === 'm' || e.key === 'M') && !gameState.isInsideInterior) {
         setShowMinimap((prev) => !prev);
       }
@@ -159,15 +176,22 @@ export default function GameTestingCanvas() {
             gameState.activeInteraction.type === 'door' &&
             Boolean(gameState.activeInteraction.targetInterior);
           const isExit = gameState.activeInteraction.type === 'exit_door';
-          if (!isDoor && !isExit) {
+
+          if (gameState.activeInteraction.type === 'npc' && gameState.activeInteraction.npcData) {
+            setTalkingNpc(gameState.activeInteraction.npcData);
+            setInspectModal(null);
+          } else if (!isDoor && !isExit) {
             setInspectModal(gameState.activeInteraction);
+            setTalkingNpc(null);
           } else {
             setInspectModal(null);
+            setTalkingNpc(null);
           }
         }
       }
       if (e.key === 'Escape') {
         setInspectModal(null);
+        setTalkingNpc(null);
         setShowMinimap(false);
         setShowHelp(false);
         setShowRoster(false);
@@ -400,9 +424,21 @@ export default function GameTestingCanvas() {
               E
             </span>
             <span>
-              {gameState.activeInteraction.actionLabel || 'Interact'}:{' '}
+              {gameState.activeInteraction.type === 'npc'
+                ? 'Talk with'
+                : gameState.activeInteraction.actionLabel || 'Interact'}:{' '}
               <strong className="text-[#F4D477]">{gameState.activeInteraction.name}</strong>
             </span>
+            {gameState.activeInteraction.type === 'npc' && (
+              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-[#315B3C] text-[#93C476] border border-[#78A85B]/40 flex items-center gap-1 font-mono">
+                <span>Gnani Voice</span>
+                {gameState.activeInteraction.distanceToPlayer !== undefined && (
+                  <span className="text-[#F4D477]">
+                    ({gameState.activeInteraction.distanceToPlayer}px / 60px)
+                  </span>
+                )}
+              </span>
+            )}
             <Sparkles className="w-4 h-4 text-[#F4D477] animate-spin" />
           </button>
         </div>
@@ -576,12 +612,27 @@ export default function GameTestingCanvas() {
                   </span>
                 </div>
 
-                <button
-                  onClick={() => setInspectModal(null)}
-                  className="px-4 py-1.5 bg-[#315B3C] hover:bg-[#78A85B] border border-[#78A85B] rounded font-pixel text-xs text-[#FFF8E9] transition cursor-pointer"
-                >
-                  Close Profile
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (inspectModal.npcData) {
+                        setTalkingNpc(inspectModal.npcData);
+                        setInspectModal(null);
+                      }
+                    }}
+                    className="px-3.5 py-1.5 bg-[#F4D477] hover:bg-[#ffe188] text-black font-pixel text-xs font-bold rounded shadow transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Talk (Voice & Text)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setInspectModal(null)}
+                    className="px-3.5 py-1.5 bg-[#1F3B27] hover:bg-[#315B3C] border border-[#28392E] rounded font-pixel text-xs text-[#BAC9B9] transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -625,6 +676,19 @@ export default function GameTestingCanvas() {
             </div>
           )}
         </div>
+      )}
+
+      {/* 5.1 MULTILINGUAL NPC VOICE DIALOGUE MODAL (GNANI AI) */}
+      {talkingNpc && (
+        <NPCDialogueModal
+          npc={talkingNpc}
+          playerDistance={Math.hypot(
+            gameState.playerX - talkingNpc.x,
+            gameState.playerY - talkingNpc.y
+          )}
+          thresholdRadius={60}
+          onClose={() => setTalkingNpc(null)}
+        />
       )}
 
       {/* 6. NPC ROSTER & SCHEDULE INSPECTOR DRAWER (Toggle via R button) */}
@@ -682,13 +746,27 @@ export default function GameTestingCanvas() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleTeleportToNpc(npc)}
-                    title="Jump to this NPC"
-                    className="p-1.5 rounded bg-[#315B3C] hover:bg-[#78A85B] text-[#FFF8E9] transition shrink-0 cursor-pointer"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => {
+                        handleTeleportToNpc(npc);
+                        setTalkingNpc(npc);
+                      }}
+                      title="Approach & Talk with this NPC"
+                      className="px-2 py-1 rounded bg-[#F4D477] hover:bg-[#ffe188] text-black font-pixel text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      <span>Talk</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleTeleportToNpc(npc)}
+                      title="Jump to this NPC"
+                      className="p-1.5 rounded bg-[#315B3C] hover:bg-[#78A85B] text-[#FFF8E9] transition cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))
             ) : (

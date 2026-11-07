@@ -46,6 +46,8 @@ export interface InteractionPoint {
   opened?: boolean;
   targetInterior?: InteriorType;
   npcData?: NPCWorldState;
+  distanceToPlayer?: number;
+  isWithinTalkRadius?: boolean;
 }
 
 export interface LocationZone {

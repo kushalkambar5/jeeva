@@ -109,6 +109,7 @@ export class VillageScene extends Phaser.Scene {
   // World size: 1920 x 1440
   public static readonly WORLD_WIDTH = 1920;
   public static readonly WORLD_HEIGHT = 1440;
+  public static readonly TALK_THRESHOLD_RADIUS = 60; // Max radius (in px) within which player can talk to an NPC
 
   private locationZones: LocationZone[] = [
     {
@@ -685,10 +686,10 @@ export class VillageScene extends Phaser.Scene {
         type: 'npc',
         x: active.x,
         y: active.y,
-        radius: 46,
+        radius: VillageScene.TALK_THRESHOLD_RADIUS,
         title: `${template.name} — ${template.role}`,
         description: `${active.description}\n\nSpeaking style: ${template.speaking_style}`,
-        actionLabel: 'Talk with',
+        actionLabel: 'Talk with (Voice / Text)',
         npcData: {
           id: template.id,
           name: template.name,
@@ -1198,7 +1199,11 @@ export class VillageScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, point.x, point.y);
       if (dist <= point.radius && dist < minDistance) {
         minDistance = dist;
-        nearest = point;
+        nearest = {
+          ...point,
+          distanceToPlayer: Math.round(dist),
+          isWithinTalkRadius: true,
+        };
       }
     }
 
