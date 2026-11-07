@@ -11,12 +11,16 @@
   "dependencies": {
     "drizzle-orm": "^0.45.4",
     "lucide-react": "^1.68.0",
+    "mem0ai": "^3.3.1",
     "next": "16.4.5",
     "next-auth": "^4.24.15",
+    "pg": "^8.23.1",
     "phaser": "^4.2.1",
     "postgres": "^4.0.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

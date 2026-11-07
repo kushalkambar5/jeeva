@@ -29,46 +29,52 @@
   },
   "buildings": {
     "main_house": {
-      "key": "main_house",
+      "key": "building_main_house",
       "url": "/assets/buildings/main_house.png",
       "width": 96,
       "height": 128
     },
+    "hospital": {
+      "key": "building_hospital",
+      "url": "/assets/buildings/hospital.png",
+      "width": 160,
+      "height": 128
+    },
+    "shop": {
+      "key": "building_shop",
+      "url": "/assets/buildings/shop.png",
+      "width": 128,
+      "height": 128
+    },
+    "workshop": {
+      "key": "building_workshop",
+      "url": "/assets/buildings/workshop.png",
+      "width": 160,
+      "height": 128
+    },
+    "farm_barn": {
+      "key": "building_farm_barn",
+      "url": "/assets/buildings/farm_barn.png",
+      "width": 128,
+      "height": 128
+    },
+    "police_post": {
+      "key": "building_police_post",
+      "url": "/assets/buildings/police_post.png",
+      "width": 128,
+      "height": 128
+    },
     "oak_tree": {
-      "key": "oak_tree",
+      "key": "prop_oak_tree",
       "url": "/assets/buildings/oak_tree.png",
       "width": 64,
       "height": 80
     },
     "chest": {
-      "key": "chest",
+      "key": "prop_chest",
       "url": "/assets/buildings/chest.png",
       "width": 16,
       "height": 16
-    },
-    "hospital_cabinet": {
-      "key": "hospital_cabinet",
-      "url": "/assets/buildings/hospital_cabinet.png",
-      "width": 32,
-      "height": 32
-    },
-    "hospital_bed": {
-      "key": "hospital_bed",
-      "url": "/assets/buildings/hospital_bed.png",
-      "width": 27,
-      "height": 35
-    },
-    "hospital_table": {
-      "key": "hospital_table",
-      "url": "/assets/buildings/hospital_table.png",
-      "width": 64,
-      "height": 32
-    },
-    "mechanic_workshop": {
-      "key": "mechanic_workshop",
-      "url": "/assets/buildings/mechanic_workshop.png",
-      "width": 800,
-      "height": 512
     }
   },
   "interiors": {

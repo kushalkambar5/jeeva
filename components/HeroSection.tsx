@@ -94,17 +94,14 @@ export default function HeroSection({
             Start Adventure (Sign Up)
           </PixelButton>
 
-          {/* Login Button */}
-          <PixelButton
-            variant="forest"
-            size="lg"
-            onClick={onOpenLogin}
-            ariaLabel="Login to Jeeva"
-            className="w-full sm:w-auto shadow-[4px_4px_0px_#14271A]"
-            icon={<Compass className="w-5 h-5 text-gold" />}
+          {/* Playable Game Testing Link */}
+          <a
+            href="/game/testing"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded bg-[#315B3C] hover:bg-[#78A85B] text-[#FFF8E9] border-2 border-[#14271A] font-pixel text-sm uppercase tracking-wider shadow-[4px_4px_0px_#14271A] transition active:translate-y-0.5 active:shadow-[2px_2px_0px_#14271A]"
           >
-            Enter Village (Login)
-          </PixelButton>
+            <Compass className="w-5 h-5 text-[#F4D477]" />
+            <span>Play Game Map (/game/testing)</span>
+          </a>
         </div>
 
         {/* Gamer Feature Highlights Bar */}
