@@ -1,10 +1,73 @@
 import Phaser from 'phaser';
-import { InteractionPoint, LocationZone, GameStateEvent, InteriorType } from './types';
+import {
+  InteractionPoint,
+  LocationZone,
+  GameStateEvent,
+  InteriorType,
+  NPCWorldState,
+  ScheduleItem,
+} from './types';
 import { sound } from './audio';
+import {
+  GAME_NPC_LIST,
+  NPC_SPRITE_CONFIGS,
+  getActiveScheduleForNPC,
+  formatMinutesToTime,
+  NPCDataTemplate,
+} from './npcData';
 
 export interface VillageSceneInitData {
   returnPos?: { x: number; y: number };
   onStateChange?: (event: GameStateEvent) => void;
+}
+
+function getIdleFrameForFacing(spriteKey: string, facing: 'down' | 'left' | 'right' | 'up'): number {
+  const is4Col = spriteKey === 'character_doctor' || spriteKey === 'character_shopkeeper';
+  if (is4Col) {
+    switch (facing) {
+      case 'left':
+        return 4;
+      case 'right':
+        return 8;
+      case 'up':
+        return 12;
+      case 'down':
+      default:
+        return 0;
+    }
+  } else {
+    switch (facing) {
+      case 'left':
+        return 4;
+      case 'right':
+        return 7;
+      case 'up':
+        return 10;
+      case 'down':
+      default:
+        return 1;
+    }
+  }
+}
+
+interface LiveNPCEntity {
+  data: NPCDataTemplate;
+  sprite: Phaser.Physics.Arcade.Sprite;
+  badgeContainer: Phaser.GameObjects.Container;
+  nameText: Phaser.GameObjects.Text;
+  activityText: Phaser.GameObjects.Text;
+  currentScheduleEntry: ScheduleItem;
+  // Schedule anchor coordinates
+  anchorX: number;
+  anchorY: number;
+  // Current wander/walk target
+  targetX: number;
+  targetY: number;
+  // Casual behavior state
+  behaviorState: 'idle' | 'wandering' | 'traveling' | 'talking';
+  idleWaitTimer: number; // in seconds
+  facing: 'down' | 'left' | 'right' | 'up';
+  interactionPoint: InteractionPoint;
 }
 
 export class VillageScene extends Phaser.Scene {
@@ -29,6 +92,20 @@ export class VillageScene extends Phaser.Scene {
   private initialSpawnPos: { x: number; y: number } = { x: 336, y: 350 };
   private isTransitioning = false;
 
+  // In-Game Time & Schedule Simulation
+  public gameTimeMinutes = 570; // 09:30 AM default
+  public isClockRunning = true;
+  private clockAccumulator = 0;
+  private liveNPCs: Map<string, LiveNPCEntity> = new Map();
+  private npcGroup!: Phaser.Physics.Arcade.Group;
+
+  // Throttling State Broadcasts to prevent React re-render thrashing
+  private lastBroadcastTime = 0;
+  private lastPlayerX = 0;
+  private lastPlayerY = 0;
+  private lastZone = '';
+  private lastActiveInteractionId: string | null = null;
+
   // World size: 1920 x 1440
   public static readonly WORLD_WIDTH = 1920;
   public static readonly WORLD_HEIGHT = 1440;
@@ -44,7 +121,7 @@ export class VillageScene extends Phaser.Scene {
       description: 'Your cozy village cottage with front porch and stone flowerbeds.',
     },
     {
-      name: "Dr. Priya's Health Clinic",
+      name: "Dr. Meera's Health Clinic",
       zoneId: 'hospital',
       x1: 560,
       y1: 120,
@@ -77,7 +154,7 @@ export class VillageScene extends Phaser.Scene {
       y1: 460,
       x2: 1120,
       y2: 740,
-      description: 'The town square with the central stone fountain and crossroads.',
+      description: 'The town square with the central stone fountain and ancient banyan chopal.',
     },
     {
       name: "Ravi's Farmstead Barn",
@@ -86,7 +163,7 @@ export class VillageScene extends Phaser.Scene {
       y1: 780,
       x2: 480,
       y2: 1060,
-      description: 'Ravi\'s red timber barn, silo, and tool sheds.',
+      description: "Ravi's red timber barn, silo, and tool sheds.",
     },
     {
       name: 'Cultivated Crop Fields',
@@ -160,10 +237,20 @@ export class VillageScene extends Phaser.Scene {
     this.load.image('prop_chest', '/assets/buildings/chest.png');
     this.load.image('village_fountain', '/assets/buildings/village_fountain.png');
 
+    // Player Spritesheet
     this.load.spritesheet('player', '/assets/characters/player.png', {
       frameWidth: 32,
       frameHeight: 32,
     });
+
+    // Preload all 10 NPC Character Spritesheets
+    for (const key of Object.keys(NPC_SPRITE_CONFIGS)) {
+      const cfg = NPC_SPRITE_CONFIGS[key];
+      this.load.spritesheet(cfg.textureKey, cfg.imagePath, {
+        frameWidth: cfg.frameWidth,
+        frameHeight: cfg.frameHeight,
+      });
+    }
   }
 
   create() {
@@ -213,26 +300,33 @@ export class VillageScene extends Phaser.Scene {
     // 8. Spawn Secret Treasure Chest
     this.spawnSecretChest();
 
-    // 9. Setup Interaction Points
+    // 9. Setup Base World Interaction Points
     this.setupInteractionPoints();
 
-    // 10. Spawn Player Character at initialSpawnPos
+    // 10. Spawn All Village NPCs According to Their Default Schedule
+    this.spawnScheduledNPCs();
+
+    // 11. Spawn Player Character at initialSpawnPos
     this.spawnPlayer(this.initialSpawnPos.x, this.initialSpawnPos.y);
 
-    // 11. Add Colliders
+    // 12. Add Colliders
     const collLayer = map.getLayer('Collision')?.tilemapLayer;
     if (collLayer) {
       this.physics.add.collider(this.player, collLayer);
     }
     this.physics.add.collider(this.player, this.obstacleGroup);
+    this.physics.add.collider(this.player, this.npcGroup);
 
-    // 12. Setup Camera
+    // 13. Setup Camera
     this.setupCamera();
 
-    // 13. Setup Input
+    // 14. Setup Input
     this.setupInputs();
 
     this.scale.on('resize', this.handleResize, this);
+
+    // Initial State Broadcast
+    this.broadcastState(true);
   }
 
   private handleResize() {
@@ -240,7 +334,7 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnBuildings() {
-    // 1. Player's Cottage (96x128) at x: 336, y: 240
+    // 1. Player's Cottage at x: 336, y: 240
     const playerHouse = this.add.image(336, 240, 'building_main_house').setOrigin(0.5, 0.5);
     playerHouse.setDepth(240 + 50);
 
@@ -249,416 +343,170 @@ export class VillageScene extends Phaser.Scene {
     houseCollider.setVisible(false);
     this.addMarkerLabel(336, 165, "Player's Cottage", '#93C476');
 
-    // 2. Village Health Clinic (96x128 Blue House) at x: 720, y: 240
-    const hospital = this.add.image(720, 240, 'building_hospital').setOrigin(0.5, 0.5);
-    hospital.setDepth(240 + 50);
+    // 2. Dr. Meera's Clinic at x: 720, y: 240
+    const clinic = this.add.image(720, 240, 'building_hospital').setOrigin(0.5, 0.5);
+    clinic.setDepth(240 + 50);
 
-    const hospitalCollider = this.obstacleGroup.create(720, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    hospitalCollider.setSize(84, 38);
-    hospitalCollider.setVisible(false);
-    this.addMarkerLabel(720, 165, 'Village Clinic', '#75B9D0');
+    const clinicCollider = this.obstacleGroup.create(720, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    clinicCollider.setSize(96, 42);
+    clinicCollider.setVisible(false);
+    this.addMarkerLabel(720, 165, 'Health Clinic', '#75B9D0');
 
-    // 3. Dev's General Store (96x128 Red House) at x: 1168, y: 240
-    const shop = this.add.image(1168, 240, 'building_shop').setOrigin(0.5, 0.5);
-    shop.setDepth(240 + 50);
+    // 3. Dev's General Store at x: 1160, y: 240
+    const store = this.add.image(1160, 240, 'building_shop').setOrigin(0.5, 0.5);
+    store.setDepth(240 + 50);
 
-    const shopCollider = this.obstacleGroup.create(1168, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    shopCollider.setSize(84, 38);
-    shopCollider.setVisible(false);
-    this.addMarkerLabel(1168, 165, 'General Store', '#F4D477');
+    const storeCollider = this.obstacleGroup.create(1160, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    storeCollider.setSize(96, 42);
+    storeCollider.setVisible(false);
+    this.addMarkerLabel(1160, 165, 'General Store', '#F4D477');
 
-    // 4. Arjun's Mechanic Workshop (96x128 Green/Stone House) at x: 1552, y: 240
-    const workshop = this.add.image(1552, 240, 'building_workshop').setOrigin(0.5, 0.5);
+    // 4. Arjun's Workshop at x: 1560, y: 240
+    const workshop = this.add.image(1560, 240, 'building_workshop').setOrigin(0.5, 0.5);
     workshop.setDepth(240 + 50);
 
-    const workshopCollider = this.obstacleGroup.create(1552, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    workshopCollider.setSize(84, 38);
+    const workshopCollider = this.obstacleGroup.create(1560, 260, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    workshopCollider.setSize(96, 42);
     workshopCollider.setVisible(false);
-    this.addMarkerLabel(1552, 165, "Arjun's Workshop", '#C87545');
+    this.addMarkerLabel(1560, 165, 'Scrap Workshop', '#C87545');
 
-    // 5. Ravi's Farm Barn (96x128 Red Barn) at x: 336, y: 920
-    const barn = this.add.image(336, 920, 'building_farm_barn').setOrigin(0.5, 0.5);
-    barn.setDepth(920 + 50);
+    // 5. Ravi's Farm Barn at x: 330, y: 880
+    const barn = this.add.image(330, 880, 'building_farm_barn').setOrigin(0.5, 0.5);
+    barn.setDepth(880 + 50);
 
-    const barnCollider = this.obstacleGroup.create(336, 940, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    barnCollider.setSize(84, 38);
+    const barnCollider = this.obstacleGroup.create(330, 900, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    barnCollider.setSize(108, 48);
     barnCollider.setVisible(false);
-    this.addMarkerLabel(336, 845, "Ravi's Barn", '#E98F9F');
+    this.addMarkerLabel(330, 805, "Ravi's Granary Barn", '#93C476');
 
-    // 6. Police & Guard Post (96x128 Green Guard House) at x: 1424, y: 920
-    const policePost = this.add.image(1424, 920, 'building_police_post').setOrigin(0.5, 0.5);
-    policePost.setDepth(920 + 50);
+    // 6. Police Post at x: 1430, y: 880
+    const police = this.add.image(1430, 880, 'building_police_post').setOrigin(0.5, 0.5);
+    police.setDepth(880 + 50);
 
-    const policeCollider = this.obstacleGroup.create(1424, 940, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    policeCollider.setSize(84, 38);
+    const policeCollider = this.obstacleGroup.create(1430, 900, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    policeCollider.setSize(84, 40);
     policeCollider.setVisible(false);
-    this.addMarkerLabel(1424, 845, 'Police Post', '#78A85B');
+    this.addMarkerLabel(1430, 815, 'Police Post', '#75B9D0');
   }
 
-  private addMarkerLabel(x: number, y: number, text: string, color = '#FFFFFF') {
+  private addMarkerLabel(x: number, y: number, text: string, color: string) {
     const label = this.add.text(x, y, text, {
-      fontFamily: 'var(--font-pixel, monospace)',
-      fontSize: '11px',
+      fontFamily: 'Pixelify Sans, monospace',
+      fontSize: '12px',
       color: color,
+      backgroundColor: '#14271AEE',
+      padding: { x: 6, y: 2 },
       stroke: '#0F1712',
       strokeThickness: 3,
-      align: 'center',
     });
     label.setOrigin(0.5, 0.5);
-    label.setDepth(y + 200);
+    label.setDepth(2000);
   }
 
   private spawnCentralPlaza() {
-    const fountain = this.add.image(944, 608, 'village_fountain').setOrigin(0.5, 0.5);
-    fountain.setDepth(608 + 20);
+    const fountain = this.add.image(950, 560, 'village_fountain').setOrigin(0.5, 0.5);
+    fountain.setDepth(560 + 20);
 
-    const fountainCollider = this.obstacleGroup.create(944, 614, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
-    fountainCollider.setCircle(22, -22, -22);
-    fountainCollider.setVisible(false);
+    const fCollider = this.obstacleGroup.create(950, 565, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    fCollider.setSize(44, 30);
+    fCollider.setVisible(false);
 
-    this.addMarkerLabel(944, 560, 'Kaveripura Fountain', '#75B9D0');
-
-    const circle = this.add.circle(944, 608, 12, 0x75b9d0, 0.4);
-    circle.setDepth(608 + 21);
     this.tweens.add({
-      targets: circle,
-      scaleX: 1.5,
-      scaleY: 1.5,
-      alpha: 0,
-      duration: 1600,
-      repeat: -1,
-      ease: 'Quad.easeOut',
-    });
-  }
-
-  private spawnFarmland() {
-    const cropTypes = [0, 1, 2, 8, 9, 10, 16, 17];
-    for (let row = 0; row < 6; row++) {
-      for (let col = 0; col < 8; col++) {
-        const cropX = 510 + col * 30;
-        const cropY = 790 + row * 32;
-        const frameIdx = cropTypes[(row * 2 + col) % cropTypes.length];
-        const plant = this.add.sprite(cropX, cropY, 'farm_plants', frameIdx);
-        plant.setScale(1.2);
-        plant.setDepth(cropY);
-      }
-    }
-
-    this.addMarkerLabel(625, 755, 'Crop Fields', '#93C476');
-  }
-
-  private spawnPond() {
-    const dock = this.add.rectangle(520, 1200, 56, 20, 0x8b5a2b);
-    dock.setStrokeStyle(2, 0x5c3a1e);
-    dock.setDepth(1201);
-
-    const lilyPads = [
-      { x: 260, y: 1140 },
-      { x: 380, y: 1180 },
-      { x: 300, y: 1220 },
-      { x: 440, y: 1150 },
-      { x: 340, y: 1250 },
-    ];
-    lilyPads.forEach((lp) => {
-      const pad = this.add.circle(lp.x, lp.y, 7, 0x2d6a4f, 0.7);
-      pad.setDepth(lp.y);
-      this.tweens.add({
-        targets: pad,
-        y: lp.y + 2,
-        duration: 2000 + Math.random() * 800,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-    });
-
-    this.addMarkerLabel(352, 1070, 'Lotus Pond', '#75B9D0');
-  }
-
-  private spawnTreesAndFoliage() {
-    interface TreePlacement {
-      x: number;
-      y: number;
-      scale?: number;
-    }
-
-    const treePositions: TreePlacement[] = [
-      // 1. Perimeter Borders
-      { x: 100, y: 70, scale: 1.05 },
-      { x: 200, y: 65, scale: 0.95 },
-      { x: 480, y: 65, scale: 1.1 },
-      { x: 580, y: 70, scale: 1.0 },
-      { x: 860, y: 65, scale: 0.9 },
-      { x: 960, y: 70, scale: 1.15 },
-      { x: 1320, y: 65, scale: 1.0 },
-      { x: 1420, y: 70, scale: 1.05 },
-      { x: 1700, y: 65, scale: 0.95 },
-      { x: 1820, y: 70, scale: 1.1 },
-      { x: 60, y: 200, scale: 1.05 },
-      { x: 60, y: 360, scale: 1.15 },
-      { x: 60, y: 520, scale: 0.95 },
-      { x: 60, y: 680, scale: 1.1 },
-      { x: 60, y: 840, scale: 1.0 },
-      { x: 60, y: 1000, scale: 1.15 },
-      { x: 60, y: 1160, scale: 0.9 },
-      { x: 60, y: 1320, scale: 1.1 },
-      { x: 1860, y: 200, scale: 1.1 },
-      { x: 1860, y: 360, scale: 0.95 },
-      { x: 1860, y: 520, scale: 1.2 },
-      { x: 1860, y: 680, scale: 1.05 },
-      { x: 1860, y: 840, scale: 0.9 },
-      { x: 1860, y: 1000, scale: 1.15 },
-      { x: 1860, y: 1160, scale: 1.0 },
-      { x: 1860, y: 1320, scale: 1.2 },
-      { x: 600, y: 1390, scale: 1.05 },
-      { x: 740, y: 1390, scale: 0.95 },
-      { x: 880, y: 1390, scale: 1.15 },
-      { x: 1020, y: 1390, scale: 1.0 },
-      { x: 1160, y: 1390, scale: 0.9 },
-      { x: 1300, y: 1390, scale: 1.1 },
-      { x: 1440, y: 1390, scale: 1.05 },
-      { x: 1580, y: 1390, scale: 0.95 },
-      { x: 1720, y: 1390, scale: 1.2 },
-
-      // 2. West Cottage Orchard (Lawns West of Player's Cottage)
-      { x: 150, y: 160, scale: 1.05 },
-      { x: 230, y: 180, scale: 0.95 },
-      { x: 140, y: 280, scale: 1.1 },
-      { x: 220, y: 310, scale: 0.85 },
-      { x: 150, y: 420, scale: 1.0 },
-      { x: 230, y: 450, scale: 0.9 },
-      { x: 170, y: 520, scale: 1.15 },
-
-      // 3. Clinic Meadows (Grounds between Player's Cottage & Clinic)
-      { x: 450, y: 180, scale: 1.1 },
-      { x: 530, y: 150, scale: 0.9 },
-      { x: 610, y: 190, scale: 1.05 },
-      { x: 460, y: 290, scale: 0.85 },
-      { x: 540, y: 330, scale: 1.2 },
-      { x: 620, y: 310, scale: 0.95 },
-      { x: 470, y: 430, scale: 1.05 },
-      { x: 550, y: 470, scale: 1.15 },
-      { x: 620, y: 440, scale: 0.9 },
-
-      // 4. Market Green (Grounds between Clinic & Dev's General Store)
-      { x: 820, y: 170, scale: 1.05 },
-      { x: 900, y: 150, scale: 1.15 },
-      { x: 990, y: 170, scale: 0.9 },
-      { x: 1070, y: 190, scale: 1.05 },
-      { x: 830, y: 280, scale: 0.9 },
-      { x: 910, y: 320, scale: 1.2 },
-      { x: 1000, y: 300, scale: 0.85 },
-      { x: 1070, y: 330, scale: 1.1 },
-      { x: 830, y: 440, scale: 1.15 },
-      { x: 910, y: 470, scale: 0.95 },
-      { x: 1010, y: 450, scale: 1.2 },
-      { x: 1070, y: 480, scale: 0.9 },
-
-      // 5. Workshop Grounds (Between General Store & Mechanic Workshop)
-      { x: 1270, y: 180, scale: 1.1 },
-      { x: 1350, y: 160, scale: 0.95 },
-      { x: 1430, y: 200, scale: 1.05 },
-      { x: 1280, y: 300, scale: 0.9 },
-      { x: 1360, y: 330, scale: 1.2 },
-      { x: 1440, y: 310, scale: 0.85 },
-      { x: 1280, y: 440, scale: 1.15 },
-      { x: 1360, y: 470, scale: 0.95 },
-      { x: 1440, y: 450, scale: 1.1 },
-
-      // 6. East Pasture (Grounds East of Mechanic Workshop)
-      { x: 1660, y: 180, scale: 1.05 },
-      { x: 1740, y: 220, scale: 1.15 },
-      { x: 1670, y: 310, scale: 0.9 },
-      { x: 1750, y: 350, scale: 1.1 },
-      { x: 1680, y: 450, scale: 1.2 },
-      { x: 1760, y: 480, scale: 0.95 },
-
-      // 7. Central Highway & Plaza Shaded Lawns (South of Road)
-      { x: 200, y: 700, scale: 1.1 },
-      { x: 420, y: 690, scale: 1.05 },
-      { x: 820, y: 700, scale: 1.1 },
-      { x: 900, y: 720, scale: 0.95 },
-      { x: 990, y: 720, scale: 0.95 },
-      { x: 1070, y: 700, scale: 1.15 },
-      { x: 1230, y: 690, scale: 1.05 },
-      { x: 1340, y: 710, scale: 0.9 },
-      { x: 1580, y: 700, scale: 1.15 },
-      { x: 1700, y: 710, scale: 1.0 },
-
-      // 8. Farm & Barn Surroundings
-      { x: 200, y: 810, scale: 1.05 },
-      { x: 200, y: 930, scale: 1.15 },
-      { x: 200, y: 1010, scale: 0.9 },
-      { x: 440, y: 800, scale: 0.85 },
-      { x: 440, y: 920, scale: 1.1 },
-      { x: 440, y: 1010, scale: 0.95 },
-
-      // 9. Central Agricultural Grasslands (Between Crops & Guard Station)
-      { x: 820, y: 810, scale: 1.15 },
-      { x: 900, y: 840, scale: 0.95 },
-      { x: 820, y: 920, scale: 0.9 },
-      { x: 890, y: 960, scale: 1.2 },
-      { x: 830, y: 1040, scale: 1.05 },
-      { x: 1080, y: 800, scale: 1.1 },
-      { x: 1170, y: 830, scale: 0.9 },
-      { x: 1260, y: 810, scale: 1.15 },
-      { x: 1100, y: 920, scale: 0.95 },
-      { x: 1180, y: 950, scale: 1.2 },
-      { x: 1270, y: 920, scale: 0.9 },
-      { x: 1100, y: 1040, scale: 1.1 },
-      { x: 1200, y: 1050, scale: 0.95 },
-      { x: 1280, y: 1030, scale: 1.15 },
-
-      // 10. Lotus Pond Shoreline (Natural Lakeside Ring)
-      { x: 140, y: 1060, scale: 1.1 },
-      { x: 240, y: 1040, scale: 0.95 },
-      { x: 340, y: 1040, scale: 1.15 },
-      { x: 440, y: 1040, scale: 0.9 },
-      { x: 560, y: 1080, scale: 1.1 },
-      { x: 580, y: 1160, scale: 0.95 },
-      { x: 580, y: 1260, scale: 1.2 },
-      { x: 560, y: 1340, scale: 0.9 },
-      { x: 460, y: 1360, scale: 1.15 },
-      { x: 340, y: 1360, scale: 0.9 },
-      { x: 220, y: 1360, scale: 1.05 },
-      { x: 140, y: 1260, scale: 1.2 },
-      { x: 130, y: 1160, scale: 0.95 },
-
-      // 11. South Valley Meadows (Between Pond & Ancient Grove)
-      { x: 680, y: 1130, scale: 1.1 },
-      { x: 760, y: 1160, scale: 0.9 },
-      { x: 690, y: 1240, scale: 1.2 },
-      { x: 760, y: 1290, scale: 0.95 },
-      { x: 680, y: 1350, scale: 1.05 },
-      { x: 870, y: 1140, scale: 1.15 },
-      { x: 950, y: 1170, scale: 0.9 },
-      { x: 880, y: 1250, scale: 1.2 },
-      { x: 960, y: 1290, scale: 0.85 },
-      { x: 890, y: 1360, scale: 1.1 },
-      { x: 1060, y: 1140, scale: 1.05 },
-      { x: 1140, y: 1170, scale: 1.2 },
-      { x: 1070, y: 1260, scale: 0.9 },
-      { x: 1150, y: 1300, scale: 1.15 },
-      { x: 1080, y: 1370, scale: 0.95 },
-      { x: 1260, y: 1140, scale: 1.2 },
-      { x: 1340, y: 1170, scale: 0.9 },
-      { x: 1270, y: 1260, scale: 1.1 },
-      { x: 1350, y: 1300, scale: 0.95 },
-      { x: 1280, y: 1370, scale: 1.15 },
-      { x: 1440, y: 1140, scale: 1.05 },
-      { x: 1520, y: 1180, scale: 1.2 },
-      { x: 1450, y: 1270, scale: 0.9 },
-      { x: 1530, y: 1310, scale: 1.15 },
-      { x: 1460, y: 1370, scale: 0.95 },
-
-      // 12. Whispering Oak Grove (Dense Sanctuary surrounding Secret Chest)
-      { x: 1630, y: 1120, scale: 1.2 },
-      { x: 1710, y: 1100, scale: 1.1 },
-      { x: 1790, y: 1120, scale: 1.25 },
-      { x: 1640, y: 1210, scale: 1.05 },
-      { x: 1720, y: 1200, scale: 1.2 },
-      { x: 1820, y: 1210, scale: 1.15 },
-      { x: 1630, y: 1310, scale: 1.2 },
-      { x: 1710, y: 1330, scale: 1.15 },
-      { x: 1830, y: 1320, scale: 1.25 },
-    ];
-
-    treePositions.forEach((pos) => {
-      const scale = pos.scale ?? 1.0;
-
-      // Soft grounding drop shadow beneath trunk
-      const shadow = this.add.ellipse(
-        pos.x,
-        pos.y + 28 * scale,
-        38 * scale,
-        14 * scale,
-        0x14271a,
-        0.3
-      );
-      shadow.setDepth(pos.y + 5);
-
-      // Lush Oak Tree Sprite
-      const tree = this.add.image(pos.x, pos.y, 'prop_oak_tree').setOrigin(0.5, 0.5);
-      tree.setScale(scale);
-      tree.setDepth(pos.y + 35 * scale);
-
-      // Gentle wind breeze sway
-      const swayDuration = 2200 + ((pos.x * 13 + pos.y * 19) % 800);
-      this.tweens.add({
-        targets: tree,
-        angle: { from: -1.2, to: 1.2 },
-        duration: swayDuration,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-
-      // Circular trunk physics obstacle
-      const collider = this.obstacleGroup.create(
-        pos.x,
-        pos.y + 24 * scale,
-        undefined,
-        undefined,
-        false
-      ) as Phaser.Physics.Arcade.Sprite;
-      collider.setCircle(13 * scale, -13 * scale, -13 * scale);
-      collider.setVisible(false);
-    });
-
-    // Decorative Wildflower & Clover Patches scattered in the open grounds
-    const flowerPatches = [
-      { x: 180, y: 220, frame: 1 },
-      { x: 200, y: 380, frame: 2 },
-      { x: 500, y: 240, frame: 8 },
-      { x: 580, y: 380, frame: 9 },
-      { x: 860, y: 220, frame: 0 },
-      { x: 1040, y: 260, frame: 16 },
-      { x: 950, y: 400, frame: 17 },
-      { x: 1310, y: 240, frame: 1 },
-      { x: 1400, y: 390, frame: 2 },
-      { x: 1710, y: 260, frame: 8 },
-      { x: 260, y: 730, frame: 9 },
-      { x: 860, y: 730, frame: 0 },
-      { x: 1120, y: 720, frame: 16 },
-      { x: 1640, y: 730, frame: 17 },
-      { x: 860, y: 880, frame: 1 },
-      { x: 1140, y: 880, frame: 2 },
-      { x: 1230, y: 990, frame: 8 },
-      { x: 720, y: 1200, frame: 9 },
-      { x: 910, y: 1200, frame: 0 },
-      { x: 1110, y: 1210, frame: 16 },
-      { x: 1310, y: 1220, frame: 17 },
-      { x: 1490, y: 1230, frame: 1 },
-      { x: 820, y: 1320, frame: 2 },
-      { x: 1010, y: 1330, frame: 8 },
-      { x: 1220, y: 1330, frame: 9 },
-      { x: 1400, y: 1340, frame: 0 },
-    ];
-
-    flowerPatches.forEach((f) => {
-      const plant = this.add.sprite(f.x, f.y, 'farm_plants', f.frame);
-      plant.setScale(1.2);
-      plant.setDepth(f.y);
-    });
-  }
-
-  private spawnSecretChest() {
-    this.chestSprite = this.add.image(1780, 1280, 'prop_chest').setOrigin(0.5, 0.5);
-    this.chestSprite.setScale(1.5);
-    this.chestSprite.setDepth(1280);
-
-    const glow = this.add.circle(1780, 1280, 12, 0xf4d477, 0.3);
-    glow.setDepth(1279);
-    this.tweens.add({
-      targets: glow,
-      scaleX: 1.4,
-      scaleY: 1.4,
-      alpha: 0.1,
+      targets: fountain,
+      scaleX: 1.02,
+      scaleY: 1.02,
       duration: 1200,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
+  }
+
+  private spawnFarmland() {
+    const cropPositions = [
+      { x: 540, y: 800, f: 0 },
+      { x: 580, y: 800, f: 1 },
+      { x: 620, y: 800, f: 2 },
+      { x: 660, y: 800, f: 3 },
+      { x: 700, y: 800, f: 0 },
+      { x: 540, y: 840, f: 1 },
+      { x: 580, y: 840, f: 2 },
+      { x: 620, y: 840, f: 3 },
+      { x: 660, y: 840, f: 0 },
+      { x: 700, y: 840, f: 1 },
+      { x: 540, y: 880, f: 2 },
+      { x: 580, y: 880, f: 3 },
+      { x: 620, y: 880, f: 0 },
+      { x: 660, y: 880, f: 1 },
+      { x: 700, y: 880, f: 2 },
+    ];
+
+    for (const crop of cropPositions) {
+      const plant = this.add.sprite(crop.x, crop.y, 'farm_plants', crop.f);
+      plant.setOrigin(0.5, 0.5);
+      plant.setDepth(crop.y);
+    }
+  }
+
+  private spawnPond() {
+    const pondCenter = { x: 350, y: 1210 };
+    for (let i = 0; i < 3; i++) {
+      const ripple = this.add.ellipse(
+        pondCenter.x + (i - 1) * 60,
+        pondCenter.y + (i % 2 === 0 ? -15 : 20),
+        40,
+        18,
+        0x75b9d0,
+        0.3
+      );
+      ripple.setDepth(10);
+      this.tweens.add({
+        targets: ripple,
+        scaleX: 1.4,
+        scaleY: 1.4,
+        alpha: 0,
+        duration: 2000 + i * 500,
+        repeat: -1,
+        ease: 'Quad.easeOut',
+      });
+    }
+  }
+
+  private spawnTreesAndFoliage() {
+    const treePositions = [
+      { x: 100, y: 220 },
+      { x: 80, y: 460 },
+      { x: 120, y: 700 },
+      { x: 520, y: 140 },
+      { x: 920, y: 130 },
+      { x: 1360, y: 140 },
+      { x: 1780, y: 200 },
+      { x: 1820, y: 450 },
+      { x: 1800, y: 750 },
+      { x: 1720, y: 1180 },
+      { x: 1820, y: 1300 },
+      { x: 1650, y: 1320 },
+      { x: 1080, y: 920 },
+      { x: 820, y: 1080 },
+    ];
+
+    for (const pos of treePositions) {
+      const tree = this.add.image(pos.x, pos.y, 'prop_oak_tree').setOrigin(0.5, 0.85);
+      tree.setDepth(pos.y + 40);
+
+      const treeCollider = this.obstacleGroup.create(pos.x, pos.y, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+      treeCollider.setSize(24, 20);
+      treeCollider.setVisible(false);
+    }
+  }
+
+  private spawnSecretChest() {
+    this.chestSprite = this.add.image(1780, 1280, 'prop_chest').setOrigin(0.5, 0.5);
+    this.chestSprite.setDepth(1280);
+
+    const chestCollider = this.obstacleGroup.create(1780, 1280, undefined, undefined, false) as Phaser.Physics.Arcade.Sprite;
+    chestCollider.setSize(28, 24);
+    chestCollider.setVisible(false);
   }
 
   private setupInteractionPoints() {
@@ -667,75 +515,53 @@ export class VillageScene extends Phaser.Scene {
         id: 'door_player_home',
         name: "Player's Cottage",
         type: 'door',
-        targetInterior: 'player_home',
         x: 336,
-        y: 290,
-        radius: 46,
-        title: "Kushal's Cottage",
-        description: 'Your home in Kaveripura. Clean, warm, and stocked with daily essentials. Step inside to relax by the hearth.',
-        actionLabel: 'Enter House',
+        y: 288,
+        radius: 44,
+        title: "Player's Cozy Homestead",
+        description: 'Warm cottage with front porch and herbal tea. Step through to enter the homestead interior.',
+        actionLabel: 'Enter Cottage',
+        targetInterior: 'player_home',
       },
       {
         id: 'door_hospital',
-        name: 'Village Clinic',
+        name: 'Health Clinic',
         type: 'door',
-        targetInterior: 'hospital',
         x: 720,
-        y: 290,
-        radius: 48,
-        title: "Dr. Priya's Health Clinic",
-        description: 'Village healthcare center. Priya prepares herbal compresses and medical care for the recovering community.',
+        y: 288,
+        radius: 44,
+        title: 'Kaveripura Health Clinic',
+        description: 'Village healthcare center. Dr. Meera prepares herbal compresses and medical care for the recovering community.',
         actionLabel: 'Enter Clinic',
+        targetInterior: 'hospital',
       },
       {
         id: 'door_shop',
-        name: "Dev's General Store",
+        name: 'General Store & Market',
         type: 'door',
+        x: 1160,
+        y: 288,
+        radius: 44,
+        title: "Dev's General Store & Trading Post",
+        description: 'Barter market stocked with winter grains, spices, oils, tools, and regional goods.',
+        actionLabel: 'Enter Shop',
         targetInterior: 'shop',
-        x: 1168,
-        y: 290,
-        radius: 46,
-        title: "Dev's Provisions",
-        description: 'Dry goods, salt, tools, and grain sacks. Step inside to browse store shelves and trade ledgers.',
-        actionLabel: 'Enter Store',
       },
       {
         id: 'door_workshop',
-        name: "Arjun's Workshop",
+        name: "Mechanic's Workshop",
         type: 'door',
-        targetInterior: 'workshop',
-        x: 1552,
-        y: 290,
-        radius: 48,
-        title: "Arjun's Mechanic Garage",
-        description: 'Sparks fly from metal fabrication tools. Enter the workshop to inspect machine parts and the generator.',
+        x: 1560,
+        y: 288,
+        radius: 44,
+        title: "Arjun's Heavy Workshop",
+        description: 'Repair bay with generators, spare cogs, welding torches, and copper machinery.',
         actionLabel: 'Enter Workshop',
+        targetInterior: 'workshop',
       },
       {
-        id: 'door_farm_barn',
-        name: "Ravi's Farm Barn",
-        type: 'door',
-        x: 336,
-        y: 970,
-        radius: 46,
-        title: "Ravi's Barn & Silo",
-        description: 'Fresh straw, pitchforks, and bags of winter feed. Ravi oversees the village grain supply.',
-        actionLabel: 'Check Barn',
-      },
-      {
-        id: 'door_police_post',
-        name: 'Police Post',
-        type: 'door',
-        x: 1424,
-        y: 970,
-        radius: 46,
-        title: 'Kaveripura Guard Station',
-        description: 'The village law and order outpost. The notice board lists storm relief alerts and perimeter patrol reports.',
-        actionLabel: 'Inspect Notice Board',
-      },
-      {
-        id: 'plaza_fountain',
-        name: 'Village Fountain',
+        id: 'central_fountain',
+        name: 'Town Fountain',
         type: 'inspect',
         x: 944,
         y: 608,
@@ -767,6 +593,146 @@ export class VillageScene extends Phaser.Scene {
         actionLabel: 'Open Chest',
       },
     ];
+  }
+
+  /**
+   * Spawns all 10 village NPC characters according to their default_schedule
+   */
+  private spawnScheduledNPCs() {
+    this.npcGroup = this.physics.add.group();
+
+    // Create 4-directional animations for all NPC sprites at casual, smooth 4 fps
+    for (const key of Object.keys(NPC_SPRITE_CONFIGS)) {
+      const cfg = NPC_SPRITE_CONFIGS[key];
+      const tex = cfg.textureKey;
+
+      if (!this.anims.exists(`${tex}-walk-down`)) {
+        this.anims.create({
+          key: `${tex}-walk-down`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkDown }),
+          frameRate: 4,
+          repeat: -1,
+        });
+      }
+      if (!this.anims.exists(`${tex}-walk-left`)) {
+        this.anims.create({
+          key: `${tex}-walk-left`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkLeft }),
+          frameRate: 4,
+          repeat: -1,
+        });
+      }
+      if (!this.anims.exists(`${tex}-walk-right`)) {
+        this.anims.create({
+          key: `${tex}-walk-right`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkRight }),
+          frameRate: 4,
+          repeat: -1,
+        });
+      }
+      if (!this.anims.exists(`${tex}-walk-up`)) {
+        this.anims.create({
+          key: `${tex}-walk-up`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkUp }),
+          frameRate: 4,
+          repeat: -1,
+        });
+      }
+    }
+
+    // Spawn each NPC at their scheduled position
+    for (const template of GAME_NPC_LIST) {
+      const cfg = NPC_SPRITE_CONFIGS[template.sprite_key] || NPC_SPRITE_CONFIGS.character_14;
+      const active = getActiveScheduleForNPC(template, this.gameTimeMinutes);
+
+      const sprite = this.physics.add.sprite(active.x, active.y, cfg.textureKey, cfg.idleFrame);
+      sprite.setOrigin(0.5, 0.7);
+      sprite.body?.setSize(16, 16);
+      sprite.body?.setOffset(8, 16);
+      sprite.setCollideWorldBounds(true);
+      sprite.setDepth(active.y);
+      sprite.setImmovable(true);
+
+      // Create overhead badge container
+      const badgeContainer = this.add.container(active.x, active.y - 32);
+
+      // Name text
+      const nameText = this.add.text(0, -9, template.name, {
+        fontSize: '11px',
+        fontFamily: 'Pixelify Sans, monospace',
+        color: '#F4D477',
+        stroke: '#14271A',
+        strokeThickness: 3,
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+
+      // Activity text
+      const activityText = this.add.text(0, 5, `[${active.activityLabel}]`, {
+        fontSize: '9px',
+        fontFamily: 'Nunito, sans-serif',
+        color: '#E5F0D9',
+        backgroundColor: '#14271AEE',
+        padding: { x: 4, y: 1 },
+      }).setOrigin(0.5);
+
+      badgeContainer.add([nameText, activityText]);
+      badgeContainer.setDepth(active.y + 10);
+
+      // Proximity interaction point
+      const interactionPoint: InteractionPoint = {
+        id: `npc_${template.id}`,
+        name: template.name,
+        type: 'npc',
+        x: active.x,
+        y: active.y,
+        radius: 46,
+        title: `${template.name} — ${template.role}`,
+        description: `${active.description}\n\nSpeaking style: ${template.speaking_style}`,
+        actionLabel: 'Talk with',
+        npcData: {
+          id: template.id,
+          name: template.name,
+          role: template.role,
+          spriteKey: template.sprite_key,
+          spriteSrc: cfg.imagePath,
+          homeZone: template.home_zone,
+          currentZone: active.entry.targetZone || template.home_zone,
+          x: active.x,
+          y: active.y,
+          activity: active.activity,
+          activityLabel: active.activityLabel,
+          activityDescription: active.description,
+          timeSlot: active.entry.time,
+          state: active.state,
+          traits: template.personality_traits,
+          speakingStyle: template.speaking_style,
+          bio: template.bio,
+          quote: template.quote,
+          allowedActions: template.allowed_actions,
+          defaultSchedule: template.default_schedule,
+        },
+      };
+
+      this.interactionPoints.push(interactionPoint);
+      this.npcGroup.add(sprite);
+
+      this.liveNPCs.set(template.id, {
+        data: template,
+        sprite,
+        badgeContainer,
+        nameText,
+        activityText,
+        currentScheduleEntry: active.entry,
+        anchorX: active.x,
+        anchorY: active.y,
+        targetX: active.x,
+        targetY: active.y,
+        behaviorState: 'idle',
+        idleWaitTimer: 2.0 + Math.random() * 4.0, // Staggered casual start
+        facing: 'down',
+        interactionPoint,
+      });
+    }
   }
 
   private spawnPlayer(x: number, y: number) {
@@ -863,6 +829,69 @@ export class VillageScene extends Phaser.Scene {
     this.cameras.main.zoomTo(this.currentZoom, 300, 'Sine.easeInOut');
   }
 
+  public setGameTime(minutes: number, instant: boolean = false) {
+    this.gameTimeMinutes = ((minutes % 1440) + 1440) % 1440;
+
+    for (const liveNpc of this.liveNPCs.values()) {
+      const active = getActiveScheduleForNPC(liveNpc.data, this.gameTimeMinutes);
+
+      // Check if schedule slot actually changed
+      const scheduleSlotChanged =
+        liveNpc.currentScheduleEntry.time !== active.entry.time ||
+        liveNpc.currentScheduleEntry.activity !== active.entry.activity;
+
+      liveNpc.currentScheduleEntry = active.entry;
+      liveNpc.activityText.setText(`[${active.activityLabel}]`);
+
+      // Update interaction point metadata
+      liveNpc.interactionPoint.title = `${liveNpc.data.name} — ${liveNpc.data.role}`;
+      liveNpc.interactionPoint.description = `${active.description}\n\nSpeaking style: ${liveNpc.data.speaking_style}`;
+      if (liveNpc.interactionPoint.npcData) {
+        liveNpc.interactionPoint.npcData.activity = active.activity;
+        liveNpc.interactionPoint.npcData.activityLabel = active.activityLabel;
+        liveNpc.interactionPoint.npcData.activityDescription = active.description;
+        liveNpc.interactionPoint.npcData.timeSlot = active.entry.time;
+        liveNpc.interactionPoint.npcData.currentZone = active.entry.targetZone || liveNpc.data.home_zone;
+        liveNpc.interactionPoint.npcData.state = active.state;
+      }
+
+      if (instant) {
+        // Instant teleport (e.g. user clicked preset button or dragged time slider)
+        liveNpc.anchorX = active.x;
+        liveNpc.anchorY = active.y;
+        liveNpc.targetX = active.x;
+        liveNpc.targetY = active.y;
+        liveNpc.behaviorState = 'idle';
+        liveNpc.idleWaitTimer = 2.0 + Math.random() * 3.0;
+        liveNpc.sprite.setPosition(active.x, active.y);
+        liveNpc.sprite.setVelocity(0, 0);
+        liveNpc.badgeContainer.setPosition(active.x, active.y - 32);
+        liveNpc.interactionPoint.x = active.x;
+        liveNpc.interactionPoint.y = active.y;
+        liveNpc.sprite.setDepth(active.y);
+        liveNpc.badgeContainer.setDepth(active.y + 10);
+        liveNpc.sprite.anims.stop();
+        liveNpc.facing = 'down';
+        liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, 'down'));
+      } else if (scheduleSlotChanged) {
+        // Natural transition to a new routine zone
+        liveNpc.anchorX = active.x;
+        liveNpc.anchorY = active.y;
+        liveNpc.targetX = active.x;
+        liveNpc.targetY = active.y;
+        liveNpc.behaviorState = 'traveling';
+      }
+    }
+
+    this.broadcastState(true);
+  }
+
+  public teleportTo(x: number, y: number) {
+    if (!this.player) return;
+    this.player.setPosition(x, y + 24);
+    this.cameras.main.pan(x, y + 24, 400, 'Sine.easeInOut');
+  }
+
   public triggerActiveInteraction() {
     if (!this.activeInteraction || this.isTransitioning) return;
 
@@ -876,7 +905,8 @@ export class VillageScene extends Phaser.Scene {
       this.chestOpened = true;
       this.activeInteraction.opened = true;
       this.activeInteraction.title = 'Ancient Village Compass Found!';
-      this.activeInteraction.description = 'You opened the chest and found a polished brass surveyor compass engraved: "Property of Kaveripura Founders - 1924".';
+      this.activeInteraction.description =
+        'You opened the chest and found a polished brass surveyor compass engraved: "Property of Kaveripura Founders - 1924".';
       sound.playChestFanfare();
 
       if (this.chestSprite) {
@@ -893,18 +923,7 @@ export class VillageScene extends Phaser.Scene {
       sound.playInteractClick();
     }
 
-    if (this.onStateChange) {
-      this.onStateChange({
-        playerX: Math.round(this.player.x),
-        playerY: Math.round(this.player.y),
-        currentZone: this.getCurrentZoneName(),
-        isMoving: false,
-        isSprinting: false,
-        activeInteraction: { ...this.activeInteraction },
-        isInsideInterior: false,
-        interiorId: null,
-      });
-    }
+    this.broadcastState(true);
   }
 
   public enterBuilding(buildingId: InteriorType) {
@@ -934,9 +953,177 @@ export class VillageScene extends Phaser.Scene {
     return 'Kaveripura Village Paths';
   }
 
-  update() {
+  public getNpcWorldStates(): NPCWorldState[] {
+    const list: NPCWorldState[] = [];
+    for (const liveNpc of this.liveNPCs.values()) {
+      if (liveNpc.interactionPoint.npcData) {
+        list.push({ ...liveNpc.interactionPoint.npcData });
+      }
+    }
+    return list;
+  }
+
+  private broadcastState(force: boolean = false, isMoving: boolean = false, isSprinting: boolean = false) {
+    if (!this.onStateChange || !this.player) return;
+
+    const now = Date.now();
+    const px = Math.round(this.player.x);
+    const py = Math.round(this.player.y);
+    const zone = this.getCurrentZoneName();
+    const interactionId = this.activeInteraction ? this.activeInteraction.id : null;
+
+    const interactionChanged = interactionId !== this.lastActiveInteractionId;
+    const zoneChanged = zone !== this.lastZone;
+    const movedSignificantly = Math.abs(px - this.lastPlayerX) > 2 || Math.abs(py - this.lastPlayerY) > 2;
+    const timeToThrottle = now - this.lastBroadcastTime > 800;
+
+    if (!force && !interactionChanged && !zoneChanged && !movedSignificantly && !timeToThrottle) {
+      return;
+    }
+
+    this.lastBroadcastTime = now;
+    this.lastPlayerX = px;
+    this.lastPlayerY = py;
+    this.lastZone = zone;
+    this.lastActiveInteractionId = interactionId;
+
+    this.onStateChange({
+      playerX: px,
+      playerY: py,
+      currentZone: zone,
+      isMoving,
+      isSprinting,
+      activeInteraction: this.activeInteraction ? { ...this.activeInteraction } : null,
+      isInsideInterior: false,
+      interiorId: null,
+      gameTime: formatMinutesToTime(this.gameTimeMinutes),
+      gameTimeMinutes: this.gameTimeMinutes,
+      npcs: this.getNpcWorldStates(),
+    });
+  }
+
+  update(time: number, delta: number) {
     if (!this.player || !this.player.body || this.isTransitioning) return;
 
+    const dt = delta / 1000; // Delta in seconds
+
+    // Advance clock at a calm, relaxed pace (1 game minute every 4 real seconds)
+    if (this.isClockRunning) {
+      this.clockAccumulator += delta;
+      if (this.clockAccumulator >= 4000) {
+        this.clockAccumulator = 0;
+        this.setGameTime(this.gameTimeMinutes + 1, false);
+      }
+    }
+
+    // Update Live NPCs: Casual, Peaceful Local Roaming & Scheduled Pathing
+    const CASUAL_WANDER_SPEED = 34; // Gentle, slow village walking speed
+    const TRAVEL_SPEED = 48; // Calm transit speed when changing scheduled zones
+
+    for (const liveNpc of this.liveNPCs.values()) {
+      const distToPlayer = Phaser.Math.Distance.Between(
+        this.player.x,
+        this.player.y,
+        liveNpc.sprite.x,
+        liveNpc.sprite.y
+      );
+
+      // If player is speaking / right next to NPC, NPC stops and politely faces player
+      if (distToPlayer <= 38) {
+        liveNpc.sprite.setVelocity(0, 0);
+        liveNpc.sprite.anims.stop();
+
+        const dxP = this.player.x - liveNpc.sprite.x;
+        const dyP = this.player.y - liveNpc.sprite.y;
+        if (Math.abs(dxP) > Math.abs(dyP)) {
+          liveNpc.facing = dxP > 0 ? 'right' : 'left';
+        } else {
+          liveNpc.facing = dyP > 0 ? 'down' : 'up';
+        }
+        liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+      } else if (liveNpc.behaviorState === 'idle') {
+        // NPC is chilling in place
+        liveNpc.sprite.setVelocity(0, 0);
+        liveNpc.sprite.anims.stop();
+        liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+
+        liveNpc.idleWaitTimer -= dt;
+
+        if (liveNpc.idleWaitTimer <= 0) {
+          const distToAnchor = Phaser.Math.Distance.Between(
+            liveNpc.sprite.x,
+            liveNpc.sprite.y,
+            liveNpc.anchorX,
+            liveNpc.anchorY
+          );
+
+          if (distToAnchor > 55) {
+            // Roamed too far from anchor; head back gently
+            liveNpc.targetX = liveNpc.anchorX + (Math.random() - 0.5) * 16;
+            liveNpc.targetY = liveNpc.anchorY + (Math.random() - 0.5) * 16;
+            liveNpc.behaviorState = 'wandering';
+          } else {
+            // 65% chance: Pick a slow, short stroll nearby (15 - 38 px away)
+            if (Math.random() < 0.65) {
+              const angle = Math.random() * Math.PI * 2;
+              const r = 12 + Math.random() * 26;
+              liveNpc.targetX = Math.round(liveNpc.anchorX + Math.cos(angle) * r);
+              liveNpc.targetY = Math.round(liveNpc.anchorY + Math.sin(angle) * r);
+              liveNpc.behaviorState = 'wandering';
+            } else {
+              // 35% chance: Just look around casually and wait another 3-5 seconds
+              const facings: Array<'down' | 'left' | 'right' | 'up'> = ['down', 'left', 'right', 'down'];
+              liveNpc.facing = facings[Math.floor(Math.random() * facings.length)];
+              liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+              liveNpc.idleWaitTimer = 3.0 + Math.random() * 4.0;
+            }
+          }
+        }
+      } else {
+        // NPC is walking (wandering casually or traveling to new scheduled zone)
+        const dx = liveNpc.targetX - liveNpc.sprite.x;
+        const dy = liveNpc.targetY - liveNpc.sprite.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist <= 3) {
+          // Arrived at destination! Stop and pause casually
+          liveNpc.sprite.setPosition(liveNpc.targetX, liveNpc.targetY);
+          liveNpc.sprite.setVelocity(0, 0);
+          liveNpc.sprite.anims.stop();
+          liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+          liveNpc.behaviorState = 'idle';
+          liveNpc.idleWaitTimer = 4.0 + Math.random() * 4.0; // 4 to 8 seconds of relaxed idle pause
+        } else {
+          const moveSpeed = liveNpc.behaviorState === 'traveling' ? TRAVEL_SPEED : CASUAL_WANDER_SPEED;
+          const vx = (dx / dist) * moveSpeed;
+          const vy = (dy / dist) * moveSpeed;
+          liveNpc.sprite.setVelocity(vx, vy);
+
+          const tex = liveNpc.data.sprite_key;
+          if (Math.abs(vx) > Math.abs(vy)) {
+            liveNpc.facing = vx > 0 ? 'right' : 'left';
+            liveNpc.sprite.anims.play(`${tex}-walk-${liveNpc.facing}`, true);
+          } else {
+            liveNpc.facing = vy > 0 ? 'down' : 'up';
+            liveNpc.sprite.anims.play(`${tex}-walk-${liveNpc.facing}`, true);
+          }
+        }
+      }
+
+      // Sync badge container, interaction point & depth sorting
+      liveNpc.badgeContainer.setPosition(liveNpc.sprite.x, liveNpc.sprite.y - 32);
+      liveNpc.interactionPoint.x = liveNpc.sprite.x;
+      liveNpc.interactionPoint.y = liveNpc.sprite.y;
+      liveNpc.sprite.setDepth(liveNpc.sprite.y);
+      liveNpc.badgeContainer.setDepth(liveNpc.sprite.y + 10);
+
+      if (liveNpc.interactionPoint.npcData) {
+        liveNpc.interactionPoint.npcData.x = Math.round(liveNpc.sprite.x);
+        liveNpc.interactionPoint.npcData.y = Math.round(liveNpc.sprite.y);
+      }
+    }
+
+    // Player Movement
     let vx = 0;
     let vy = 0;
 
@@ -1003,6 +1190,7 @@ export class VillageScene extends Phaser.Scene {
 
     this.player.setDepth(this.player.y);
 
+    // Proximity Interaction Detection
     let nearest: InteractionPoint | null = null;
     let minDistance = 999999;
 
@@ -1021,17 +1209,6 @@ export class VillageScene extends Phaser.Scene {
       sound.playChime();
     }
 
-    if (this.onStateChange) {
-      this.onStateChange({
-        playerX: Math.round(this.player.x),
-        playerY: Math.round(this.player.y),
-        currentZone: this.getCurrentZoneName(),
-        isMoving,
-        isSprinting,
-        activeInteraction: this.activeInteraction ? { ...this.activeInteraction } : null,
-        isInsideInterior: false,
-        interiorId: null,
-      });
-    }
+    this.broadcastState(false, isMoving, isSprinting);
   }
 }

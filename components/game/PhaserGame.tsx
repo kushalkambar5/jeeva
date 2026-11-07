@@ -9,6 +9,9 @@ export interface PhaserGameRef {
   setZoom: (zoom: number) => void;
   triggerInteraction: () => void;
   exitInterior: () => void;
+  setGameTime: (minutes: number) => void;
+  toggleClock: (running: boolean) => void;
+  teleportTo: (x: number, y: number) => void;
 }
 
 interface PhaserGameProps {
@@ -49,6 +52,27 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
       const current = activeScenes[0] as any;
       if (current?.exitToVillage) {
         current.exitToVillage();
+      }
+    },
+    setGameTime: (minutes: number) => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.setGameTime) {
+        current.setGameTime(minutes, true);
+      }
+    },
+    toggleClock: (running: boolean) => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current) {
+        current.isClockRunning = running;
+      }
+    },
+    teleportTo: (x: number, y: number) => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.teleportTo) {
+        current.teleportTo(x, y);
       }
     },
   }));
