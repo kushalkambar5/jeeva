@@ -431,6 +431,19 @@ export function getMerchantItems(merchantId: 'dev_shopkeeper' | 'arjun_mechanic'
 }
 
 /**
+ * Returns a human-readable summary of items sold by a merchant for LLM prompt context
+ */
+export function getMerchantCatalogSummary(merchantId: 'dev_shopkeeper' | 'arjun_mechanic'): string {
+  const items = getMerchantItems(merchantId);
+  return items
+    .map(
+      (item) =>
+        `- ${item.name} (${item.hindiName}) [ID: ${item.id}]: Base price ₹${item.basePrice}. Category: ${item.category}. Description: ${item.description}`
+    )
+    .join('\n');
+}
+
+/**
  * Negotiation Result definition
  */
 export interface NegotiationOutcome {
@@ -551,3 +564,78 @@ export function evaluateNegotiation(
     patienceRemaining: Math.max(0, patience - 1),
   };
 }
+
+/**
+ * Dropped World Item representation in Phaser and LocalStorage
+ */
+export interface DroppedWorldItem {
+  id: string;
+  itemId: string;
+  quantity: number;
+  x: number;
+  y: number;
+  scene: string; // 'village' | 'shop' | 'workshop' | 'player_home' | 'hospital'
+  droppedAt: number;
+  canPickupAt: number; // timestamp after which player can pick it up (3s default)
+}
+
+export const STORAGE_DROPPED_ITEMS_KEY = 'jeeva_dropped_items_v1';
+
+export function getCatalogItem(itemId: string): CatalogItem | undefined {
+  return VILLAGE_ITEMS_CATALOG.find((i) => i.id === itemId);
+}
+
+export function loadDroppedItems(): DroppedWorldItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_DROPPED_ITEMS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn('Error reading dropped items:', e);
+    return [];
+  }
+}
+
+export function saveDroppedItems(items: DroppedWorldItem[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_DROPPED_ITEMS_KEY, JSON.stringify(items));
+    window.dispatchEvent(new CustomEvent('jeeva:dropped-items-updated', { detail: { items } }));
+  } catch (e) {
+    console.warn('Error saving dropped items:', e);
+  }
+}
+
+export function addDroppedItem(
+  itemId: string,
+  quantity: number,
+  x: number,
+  y: number,
+  scene: string = 'village',
+  delayMs: number = 3000
+): DroppedWorldItem {
+  const items = loadDroppedItems();
+  const now = Date.now();
+  const newDrop: DroppedWorldItem = {
+    id: `drop_${now}_${Math.random().toString(36).substring(2, 7)}`,
+    itemId,
+    quantity,
+    x: Math.round(x),
+    y: Math.round(y),
+    scene,
+    droppedAt: now,
+    canPickupAt: now + delayMs,
+  };
+  items.push(newDrop);
+  saveDroppedItems(items);
+  return newDrop;
+}
+
+export function removeDroppedItem(dropId: string): void {
+  const items = loadDroppedItems();
+  const filtered = items.filter((d) => d.id !== dropId);
+  saveDroppedItems(filtered);
+}
+

@@ -24,6 +24,7 @@ import {
   addItemToInventory,
   removeItemFromSlot,
   evaluateNegotiation,
+  addDroppedItem,
 } from '@/lib/inventory';
 import PixelSprite from '../PixelSprite';
 import { sound } from './audio';
@@ -35,6 +36,9 @@ interface TradeNegotiationModalProps {
   merchantName: string;
   merchantRole?: string;
   merchantSpriteSrc?: string;
+  playerX?: number;
+  playerY?: number;
+  currentScene?: string;
 }
 
 export function TradeNegotiationModal({
@@ -44,6 +48,9 @@ export function TradeNegotiationModal({
   merchantName,
   merchantRole,
   merchantSpriteSrc,
+  playerX,
+  playerY,
+  currentScene,
 }: TradeNegotiationModalProps) {
   const isDev = merchantId === 'dev_shopkeeper';
   const merchantCatalog = getMerchantItems(merchantId);
@@ -172,7 +179,7 @@ export function TradeNegotiationModal({
     }
   };
 
-  // Perform Item Purchase (Into 15-Slot Minecraft Inventory)
+  // Perform Item Purchase (Merchant Drops into World for Pickup)
   const handleBuyItem = () => {
     if (!selectedItem) return;
 
@@ -185,27 +192,31 @@ export function TradeNegotiationModal({
       return;
     }
 
-    const { success, newSlots, message } = addItemToInventory(playerSlots, selectedItem, 1);
-    if (!success) {
-      setFeedback({
-        type: 'error',
-        message,
-      });
-      sound.playInteractClick();
-      return;
-    }
-
     // Deduct coins & persist
     const newWallet = playerWallet - currentAskingPrice;
     savePlayerWallet(newWallet);
     setPlayerWallet(newWallet);
-    setPlayerSlots(newSlots);
+
+    // Drop the item into the world in front of merchant/player for player to pick up!
+    const dropX = playerX ?? 336;
+    const dropY = (playerY ?? 350) + 16;
+    addDroppedItem(selectedItem.id, 1, dropX, dropY, currentScene || 'village', 0);
+
+    setSpeechBubble({
+      textHindi: isDev
+        ? `पैसे मिल गए भाई! मैंने ${selectedItem.hindiName} सामने रख दी है, उठा लीजिए!`
+        : `पैसा मिल गया। यह लो तुम्हारी ${selectedItem.hindiName}, जमीन से उठा लो।`,
+      textEnglish: isDev
+        ? `Payment received! I've dropped the ${selectedItem.name} on the ground for you. Walk over to pick it up!`
+        : `Payment verified. I've dropped the ${selectedItem.name} right in front of you. Go ahead and pick it up.`,
+      status: 'accepted',
+    });
 
     setFeedback({
       type: 'success',
-      message: `Bought 1x ${selectedItem.name}! Stored in Minecraft inventory.`,
+      message: `${merchantName} dropped 1x ${selectedItem.name}! Step over it to pick up into your inventory.`,
     });
-    sound.playQuestComplete();
+    sound.playQuestAccept();
   };
 
   // Perform Item Sale (From Player Inventory to Merchant for 75% base price)

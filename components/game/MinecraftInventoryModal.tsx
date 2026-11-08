@@ -102,6 +102,7 @@ export function MinecraftInventoryModal({
             <h2 className="font-pixel text-base font-bold text-[#1E1E1E] tracking-wider uppercase">
               Player Inventory ({occupiedCount}/{MAX_INVENTORY_SLOTS})
             </h2>
+            <span className="text-[10px] font-mono text-[#555555] ml-2 font-bold">[E to close]</span>
           </div>
 
           {/* Wallet Coin Pill & Close Button */}
@@ -317,31 +318,25 @@ export function MinecraftInventoryModal({
  * Minecraft Hotbar Component rendered persistently at the bottom of the game screen
  */
 export function MinecraftHotbar({
-  onOpenInventory,
   selectedSlotIndex,
   onSelectSlot,
 }: {
-  onOpenInventory: () => void;
+  onOpenInventory?: () => void;
   selectedSlotIndex: number;
   onSelectSlot: (idx: number) => void;
 }) {
   const [slots, setSlots] = useState<InventorySlot[]>([]);
-  const [wallet, setWallet] = useState<number>(250);
 
   useEffect(() => {
     setSlots(loadPlayerInventory());
-    setWallet(loadPlayerWallet());
 
     const update = () => {
       setSlots(loadPlayerInventory());
-      setWallet(loadPlayerWallet());
     };
 
     window.addEventListener('jeeva:inventory-updated', update);
-    window.addEventListener('jeeva:wallet-updated', update);
     return () => {
       window.removeEventListener('jeeva:inventory-updated', update);
-      window.removeEventListener('jeeva:wallet-updated', update);
     };
   }, []);
 
@@ -403,17 +398,6 @@ export function MinecraftHotbar({
           );
         })}
       </div>
-
-      {/* Bag / Inventory Toggle Button */}
-      <button
-        onClick={onOpenInventory}
-        title="Open Full 15-Slot Inventory (Key: I)"
-        className="flex items-center gap-1.5 px-3 py-2 bg-[#14271A]/95 hover:bg-[#1F3B27] active:bg-[#0F1712] border-2 border-[#78A85B] text-[#F4D477] font-pixel text-xs font-bold rounded-lg shadow-xl transition cursor-pointer"
-      >
-        <Package className="w-4 h-4 text-[#F4D477]" />
-        <span>Bag [I]</span>
-        <span className="text-[10px] font-mono text-[#93C476] ml-1">₹{wallet}</span>
-      </button>
     </div>
   );
 }

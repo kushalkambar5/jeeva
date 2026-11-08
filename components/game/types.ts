@@ -77,8 +77,11 @@ export interface GameStateEvent {
 }
 
 export interface NPCToolCall {
-  tool: 'follow_player' | 'stop_following' | 'open_trade';
+  tool: 'follow_player' | 'stop_following' | 'open_trade' | 'trade_deal' | 'go_home';
   targetNpcId: string;
   targetNpcName?: string;
+  itemId?: string;
+  itemName?: string;
+  price?: number;
   details?: string;
 }

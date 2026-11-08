@@ -1340,3 +1340,35 @@ export function getActiveScheduleForNPC(
     state: active.state || 'idle',
   };
 }
+
+export function getIdleFrameForFacing(
+  spriteKey: string,
+  facing: 'down' | 'left' | 'right' | 'up'
+): number {
+  const is4Col = spriteKey === 'character_doctor' || spriteKey === 'character_shopkeeper';
+  if (is4Col) {
+    switch (facing) {
+      case 'left':
+        return 4;
+      case 'right':
+        return 8;
+      case 'up':
+        return 12;
+      case 'down':
+      default:
+        return 0;
+    }
+  } else {
+    switch (facing) {
+      case 'left':
+        return 4;
+      case 'right':
+        return 7;
+      case 'up':
+        return 10;
+      case 'down':
+      default:
+        return 1;
+    }
+  }
+}

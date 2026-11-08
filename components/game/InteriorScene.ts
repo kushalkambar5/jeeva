@@ -1,11 +1,49 @@
 import Phaser from 'phaser';
-import { InteriorType, InteractionPoint, GameStateEvent } from './types';
+import { InteriorType, InteractionPoint, GameStateEvent, NPCWorldState } from './types';
 import { sound } from './audio';
+import {
+  DroppedWorldItem,
+  loadDroppedItems,
+  removeDroppedItem,
+  getCatalogItem,
+  addItemToInventory,
+  loadPlayerInventory,
+} from '@/lib/inventory';
+import {
+  NPCDataTemplate,
+  GAME_NPC_LIST,
+  NPC_SPRITE_CONFIGS,
+  getIdleFrameForFacing,
+} from './npcData';
+import { getNpcLocations, setNpcLocation, RESIDENT_NPC_BUILDINGS } from '@/lib/npcLocations';
+
+interface LiveDroppedItem {
+  data: DroppedWorldItem;
+  container: Phaser.GameObjects.Container;
+  tween: Phaser.Tweens.Tween;
+}
+
+interface LiveNPCEntity {
+  data: NPCDataTemplate;
+  sprite: Phaser.Physics.Arcade.Sprite;
+  badgeContainer: Phaser.GameObjects.Container;
+  nameText: Phaser.GameObjects.Text;
+  activityText: Phaser.GameObjects.Text;
+  anchorX: number;
+  anchorY: number;
+  targetX: number;
+  targetY: number;
+  behaviorState: 'idle' | 'wandering' | 'talking' | 'following';
+  idleWaitTimer: number;
+  facing: 'down' | 'left' | 'right' | 'up';
+  interactionPoint: InteractionPoint;
+}
 
 export interface InteriorSceneInitData {
   buildingId: InteriorType;
-  returnPos: { x: number; y: number };
+  returnPos?: { x: number; y: number };
   onStateChange?: (event: GameStateEvent) => void;
+  followingNpcId?: string | null;
 }
 
 export class InteriorScene extends Phaser.Scene {
@@ -24,10 +62,16 @@ export class InteriorScene extends Phaser.Scene {
     interact: Phaser.Input.Keyboard.Key;
   };
   private obstacleGroup!: Phaser.Physics.Arcade.StaticGroup;
+  private liveNPCs: Map<string, LiveNPCEntity> = new Map();
+  private npcGroup!: Phaser.Physics.Arcade.Group;
+  private followingNpcId: string | null = null;
   private lastFacing: 'down' | 'left' | 'right' | 'up' = 'up';
   private interactionPoints: InteractionPoint[] = [];
   private activeInteraction: InteractionPoint | null = null;
   private isExiting = false;
+
+  private droppedItems: Map<string, LiveDroppedItem> = new Map();
+  private boundDroppedItemsListener?: () => void;
 
   private roomWidth = 512;
   private roomHeight = 384;
@@ -41,7 +85,11 @@ export class InteriorScene extends Phaser.Scene {
     this.buildingId = data.buildingId || 'player_home';
     this.returnPos = data.returnPos || { x: 336, y: 350 };
     this.onStateChange = data.onStateChange;
+    this.followingNpcId = data.followingNpcId ?? this.followingNpcId ?? null;
     this.isExiting = false;
+    this.liveNPCs.clear();
+    this.interactionPoints = [];
+    this.activeInteraction = null;
   }
 
   preload() {
@@ -54,6 +102,17 @@ export class InteriorScene extends Phaser.Scene {
       frameWidth: 32,
       frameHeight: 32,
     });
+
+    // Preload NPC Character Spritesheets
+    for (const key of Object.keys(NPC_SPRITE_CONFIGS)) {
+      const cfg = NPC_SPRITE_CONFIGS[key];
+      if (!this.textures.exists(cfg.textureKey)) {
+        this.load.spritesheet(cfg.textureKey, cfg.imagePath, {
+          frameWidth: cfg.frameWidth,
+          frameHeight: cfg.frameHeight,
+        });
+      }
+    }
   }
 
   create() {
@@ -166,7 +225,14 @@ export class InteriorScene extends Phaser.Scene {
     // Spawn Player Character
     this.spawnPlayer(spawnX, spawnY);
 
+    // Spawn Room NPCs (Residents + Following Companion)
+    this.npcGroup = this.physics.add.group();
+    this.setupNpcAnimations();
+    this.spawnInteriorNPCs(spawnX, spawnY);
+
     this.physics.add.collider(this.player, this.obstacleGroup);
+    this.physics.add.collider(this.player, this.npcGroup);
+    this.physics.add.collider(this.npcGroup, this.obstacleGroup);
 
     // Setup Camera
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
@@ -178,6 +244,81 @@ export class InteriorScene extends Phaser.Scene {
     this.setupInputs();
 
     this.scale.on('resize', this.handleResize, this);
+
+    // Dropped Items in Interior Room
+    this.syncDroppedItemsFromStorage();
+    if (typeof window !== 'undefined') {
+      this.boundDroppedItemsListener = () => this.syncDroppedItemsFromStorage();
+      window.addEventListener('jeeva:dropped-items-updated', this.boundDroppedItemsListener);
+      this.events.once('shutdown', () => {
+        if (this.boundDroppedItemsListener) {
+          window.removeEventListener('jeeva:dropped-items-updated', this.boundDroppedItemsListener);
+        }
+      });
+    }
+  }
+
+  public syncDroppedItemsFromStorage(): void {
+    if (typeof window === 'undefined') return;
+    const currentDrops = loadDroppedItems().filter((d) => d.scene === this.buildingId);
+    const dropIds = new Set(currentDrops.map((d) => d.id));
+
+    for (const [id, liveDrop] of this.droppedItems.entries()) {
+      if (!dropIds.has(id)) {
+        liveDrop.tween?.stop();
+        liveDrop.container.destroy();
+        this.droppedItems.delete(id);
+      }
+    }
+
+    for (const drop of currentDrops) {
+      if (!this.droppedItems.has(drop.id)) {
+        this.spawnDroppedItemVisual(drop);
+      }
+    }
+  }
+
+  private spawnDroppedItemVisual(drop: DroppedWorldItem): void {
+    const catalogItem = getCatalogItem(drop.itemId);
+    if (!catalogItem) return;
+
+    const container = this.add.container(drop.x, drop.y);
+    container.setDepth(drop.y + 5);
+
+    const shadow = this.add.ellipse(0, 8, 16, 7, 0x000000, 0.45);
+    const iconText = this.add.text(0, -4, catalogItem.icon, {
+      fontSize: '18px',
+    }).setOrigin(0.5);
+
+    const nameTag = this.add.text(
+      0,
+      13,
+      drop.quantity > 1 ? `${catalogItem.name} x${drop.quantity}` : catalogItem.name,
+      {
+        fontSize: '8px',
+        fontFamily: 'Courier, monospace',
+        color: '#F4D477',
+        backgroundColor: 'rgba(15, 23, 18, 0.85)',
+        padding: { x: 3, y: 1 },
+      }
+    ).setOrigin(0.5);
+
+    container.add([shadow, iconText, nameTag]);
+
+    const tween = this.tweens.add({
+      targets: iconText,
+      y: -8,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.droppedItems.set(drop.id, {
+      data: drop,
+      container,
+      tween,
+    });
   }
 
   private handleResize() {
@@ -482,18 +623,19 @@ export class InteriorScene extends Phaser.Scene {
     if (!this.input.keyboard) return;
 
     this.cursors = this.input.keyboard.createCursorKeys();
-    // Do not capture Space in Phaser so window can handle push-to-talk voice interactions cleanly
+    // Do not capture Space or E in Phaser so window can handle voice push-to-talk and inventory cleanly
     this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.E);
     this.wasd = {
       up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
       down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
       right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
       sprint: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
-      interact: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+      interact: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F),
     };
 
-    this.input.keyboard.on('keydown-E', () => {
+    this.input.keyboard.on('keydown-F', () => {
       this.triggerActiveInteraction();
     });
     this.input.keyboard.on('keydown-Z', () => {
@@ -501,7 +643,7 @@ export class InteriorScene extends Phaser.Scene {
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.input.keyboard?.off('keydown-E');
+      this.input.keyboard?.off('keydown-F');
       this.input.keyboard?.off('keydown-Z');
       this.scale.off('resize', this.handleResize, this);
     });
@@ -535,6 +677,11 @@ export class InteriorScene extends Phaser.Scene {
     if (this.isExiting) return;
     this.isExiting = true;
 
+    // If an NPC is following the player, mark their location as 'village'
+    if (this.followingNpcId) {
+      setNpcLocation(this.followingNpcId, 'village');
+    }
+
     sound.playFootstep();
     this.cameras.main.fadeOut(200, 15, 23, 18);
 
@@ -542,8 +689,293 @@ export class InteriorScene extends Phaser.Scene {
       this.scene.start('VillageScene', {
         returnPos: this.returnPos,
         onStateChange: this.onStateChange,
+        followingNpcId: this.followingNpcId,
       });
     });
+  }
+
+  private setupNpcAnimations() {
+    for (const key of Object.keys(NPC_SPRITE_CONFIGS)) {
+      const cfg = NPC_SPRITE_CONFIGS[key];
+      const tex = cfg.textureKey;
+
+      if (!this.anims.exists(`${tex}-walk-down`)) {
+        this.anims.create({
+          key: `${tex}-walk-down`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkDown }),
+          frameRate: 6,
+          repeat: -1,
+        });
+      }
+      if (!this.anims.exists(`${tex}-walk-left`)) {
+        this.anims.create({
+          key: `${tex}-walk-left`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkLeft }),
+          frameRate: 6,
+          repeat: -1,
+        });
+      }
+      if (!this.anims.exists(`${tex}-walk-right`)) {
+        this.anims.create({
+          key: `${tex}-walk-right`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkRight }),
+          frameRate: 6,
+          repeat: -1,
+        });
+      }
+      if (!this.anims.exists(`${tex}-walk-up`)) {
+        this.anims.create({
+          key: `${tex}-walk-up`,
+          frames: this.anims.generateFrameNumbers(tex, { frames: cfg.walkUp }),
+          frameRate: 6,
+          repeat: -1,
+        });
+      }
+    }
+  }
+
+  private spawnInteriorNPCs(spawnX: number, spawnY: number) {
+    const locations = getNpcLocations();
+
+    // 1. If an NPC companion was following the player into this building, spawn them near the doorway
+    if (this.followingNpcId) {
+      const followTemplate = GAME_NPC_LIST.find((n) => n.id === this.followingNpcId);
+      if (followTemplate) {
+        const compX = Math.max(30, Math.min(this.roomWidth - 30, spawnX + 28));
+        const compY = spawnY;
+        this.spawnNpcInRoom(followTemplate, compX, compY, true, '🐾 Following You');
+      }
+    }
+
+    // 2. Identify resident NPC for this building
+    let residentId: string | null = null;
+    let rx = 256;
+    let ry = 200;
+    let rActivity = 'Resting';
+
+    if (this.buildingId === 'player_home') {
+      residentId = 'priya_wife';
+      rx = 210;
+      ry = 160; // Cozy near dining table and hearth
+      rActivity = 'Resting by Hearth';
+    } else if (this.buildingId === 'shop') {
+      residentId = 'dev_shopkeeper';
+      rx = 255;
+      ry = 150; // Standing behind checkout counter
+      rActivity = 'Tending General Store';
+    } else if (this.buildingId === 'workshop') {
+      residentId = 'arjun_mechanic';
+      rx = 240;
+      ry = 180; // Beside fabrication workbench
+      rActivity = 'Tinkering at Workbench';
+    }
+
+    // 3. Spawn resident NPC if stationed here and not already spawned as the following companion
+    if (residentId && (!this.followingNpcId || this.followingNpcId !== residentId)) {
+      const loc = locations[residentId] || (residentId in RESIDENT_NPC_BUILDINGS ? RESIDENT_NPC_BUILDINGS[residentId] : 'village');
+      if (loc === this.buildingId) {
+        const template = GAME_NPC_LIST.find((n) => n.id === residentId);
+        if (template) {
+          this.spawnNpcInRoom(template, rx, ry, false, rActivity);
+        }
+      }
+    }
+  }
+
+  private spawnNpcInRoom(
+    template: NPCDataTemplate,
+    x: number,
+    y: number,
+    isFollowing: boolean,
+    activityLabel: string
+  ) {
+    const cfg = NPC_SPRITE_CONFIGS[template.sprite_key] || NPC_SPRITE_CONFIGS.character_14;
+    const initialFacing: 'down' | 'left' | 'right' | 'up' = isFollowing ? 'up' : 'down';
+    const initialFrame = getIdleFrameForFacing(template.sprite_key, initialFacing);
+
+    const sprite = this.physics.add.sprite(x, y, cfg.textureKey, initialFrame);
+    sprite.setOrigin(0.5, 0.7);
+    sprite.body?.setSize(16, 16);
+    sprite.body?.setOffset(8, 16);
+    sprite.setCollideWorldBounds(true);
+    sprite.setDepth(y);
+    sprite.setImmovable(!isFollowing);
+
+    const badgeContainer = this.add.container(x, y - 32);
+
+    const nameText = this.add.text(0, -9, template.name, {
+      fontSize: '11px',
+      fontFamily: 'Pixelify Sans, monospace',
+      color: '#F4D477',
+      stroke: '#14271A',
+      strokeThickness: 3,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    const activityText = this.add.text(
+      0,
+      5,
+      isFollowing ? '🐾 Following You' : `[${activityLabel}]`,
+      {
+        fontSize: '9px',
+        fontFamily: 'Nunito, sans-serif',
+        color: isFollowing ? '#F4D477' : '#E5F0D9',
+        backgroundColor: '#14271AEE',
+        padding: { x: 4, y: 1 },
+      }
+    ).setOrigin(0.5);
+
+    badgeContainer.add([nameText, activityText]);
+    badgeContainer.setDepth(y + 10);
+
+    const interactionPoint: InteractionPoint = {
+      id: `npc_${template.id}`,
+      name: template.name,
+      type: 'npc',
+      x,
+      y,
+      radius: 48,
+      title: `${template.name} — ${template.role}`,
+      description: isFollowing
+        ? `${template.name} is currently following you.`
+        : `${template.bio}\n\nSpeaking style: ${template.speaking_style}`,
+      actionLabel: 'Talk with (Voice / Text)',
+      npcData: {
+        id: template.id,
+        name: template.name,
+        role: template.role,
+        spriteKey: template.sprite_key,
+        spriteSrc: cfg.imagePath,
+        homeZone: template.home_zone,
+        currentZone: this.getRoomZoneName(),
+        x,
+        y,
+        activity: isFollowing ? 'following_player' : activityLabel.toLowerCase().replace(/\s+/g, '_'),
+        activityLabel: isFollowing ? 'Following You' : activityLabel,
+        activityDescription: isFollowing
+          ? `${template.name} is closely following you.`
+          : `${template.name} is stationed inside ${this.getRoomZoneName()}.`,
+        timeSlot: 'Current',
+        state: isFollowing ? 'walking' : 'idle',
+        traits: template.personality_traits,
+        speakingStyle: template.speaking_style,
+        bio: template.bio,
+        quote: template.quote,
+        allowedActions: template.allowed_actions,
+        defaultSchedule: template.default_schedule,
+      },
+    };
+
+    this.interactionPoints.push(interactionPoint);
+    this.npcGroup.add(sprite);
+
+    this.liveNPCs.set(template.id, {
+      data: template,
+      sprite,
+      badgeContainer,
+      nameText,
+      activityText,
+      anchorX: x,
+      anchorY: y,
+      targetX: x,
+      targetY: y,
+      behaviorState: isFollowing ? 'following' : 'idle',
+      idleWaitTimer: 3.0,
+      facing: initialFacing,
+      interactionPoint,
+    });
+  }
+
+  public commandFollowPlayer(npcId: string): boolean {
+    const liveNpc = this.liveNPCs.get(npcId);
+    if (!liveNpc) return false;
+
+    if (this.followingNpcId && this.followingNpcId !== npcId) {
+      const prev = this.liveNPCs.get(this.followingNpcId);
+      if (prev) {
+        prev.behaviorState = 'idle';
+        prev.activityText.setText('Resting');
+        prev.activityText.setColor('#93C476');
+        prev.sprite.setImmovable(true);
+      }
+    }
+
+    this.followingNpcId = npcId;
+    liveNpc.behaviorState = 'following';
+    liveNpc.sprite.setImmovable(false);
+    liveNpc.activityText.setText('🐾 Following You');
+    liveNpc.activityText.setColor('#F4D477');
+    if (liveNpc.interactionPoint.npcData) {
+      liveNpc.interactionPoint.npcData.activity = 'following_player';
+      liveNpc.interactionPoint.npcData.activityLabel = 'Following You';
+    }
+    sound.playInteractClick();
+    return true;
+  }
+
+  public commandStopFollowing(npcId?: string): boolean {
+    const targetId = npcId || this.followingNpcId;
+    if (!targetId) return false;
+
+    const liveNpc = this.liveNPCs.get(targetId);
+    if (liveNpc) {
+      liveNpc.behaviorState = 'idle';
+      liveNpc.sprite.setVelocity(0, 0);
+      liveNpc.sprite.anims.stop();
+      liveNpc.sprite.setImmovable(true);
+      liveNpc.activityText.setText('Resting');
+      liveNpc.activityText.setColor('#93C476');
+      if (liveNpc.interactionPoint.npcData) {
+        liveNpc.interactionPoint.npcData.activity = 'idle';
+        liveNpc.interactionPoint.npcData.activityLabel = 'Resting';
+      }
+    }
+
+    this.followingNpcId = null;
+    sound.playInteractClick();
+    return true;
+  }
+
+  public getFollowingNpcId(): string | null {
+    return this.followingNpcId;
+  }
+
+  public despawnNpc(npcId: string): boolean {
+    const liveNpc = this.liveNPCs.get(npcId);
+    if (!liveNpc) return false;
+
+    this.interactionPoints = this.interactionPoints.filter(
+      (p) => p.id !== `npc_${npcId}` && p.id !== liveNpc.interactionPoint.id
+    );
+    if (this.activeInteraction?.id === `npc_${npcId}`) {
+      this.activeInteraction = null;
+    }
+    if (this.followingNpcId === npcId) {
+      this.followingNpcId = null;
+    }
+
+    this.tweens.add({
+      targets: [liveNpc.sprite, liveNpc.badgeContainer],
+      alpha: 0,
+      duration: 500,
+      onComplete: () => {
+        liveNpc.badgeContainer.destroy();
+        liveNpc.sprite.destroy();
+      },
+    });
+
+    this.liveNPCs.delete(npcId);
+    return true;
+  }
+
+  public getNpcWorldStates(): NPCWorldState[] {
+    const list: NPCWorldState[] = [];
+    for (const liveNpc of this.liveNPCs.values()) {
+      if (liveNpc.interactionPoint.npcData) {
+        list.push({ ...liveNpc.interactionPoint.npcData });
+      }
+    }
+    return list;
   }
 
   private getRoomZoneName(): string {
@@ -643,6 +1075,74 @@ export class InteriorScene extends Phaser.Scene {
 
     this.player.setDepth(this.player.y);
 
+    // Update Room NPCs (companion following, badge position, facing player)
+    for (const liveNpc of this.liveNPCs.values()) {
+      const distToPlayer = Phaser.Math.Distance.Between(
+        this.player.x,
+        this.player.y,
+        liveNpc.sprite.x,
+        liveNpc.sprite.y
+      );
+
+      if (liveNpc.data.id === this.followingNpcId || liveNpc.behaviorState === 'following') {
+        const dx = this.player.x - liveNpc.sprite.x;
+        const dy = this.player.y - liveNpc.sprite.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 44) {
+          const followSpeed = isSprinting ? 140 : 92;
+          const vx = (dx / dist) * followSpeed;
+          const vy = (dy / dist) * followSpeed;
+          liveNpc.sprite.setVelocity(vx, vy);
+
+          const tex = liveNpc.data.sprite_key;
+          if (Math.abs(vx) > Math.abs(vy)) {
+            liveNpc.facing = vx > 0 ? 'right' : 'left';
+            liveNpc.sprite.anims.play(`${tex}-walk-${liveNpc.facing}`, true);
+          } else {
+            liveNpc.facing = vy > 0 ? 'down' : 'up';
+            liveNpc.sprite.anims.play(`${tex}-walk-${liveNpc.facing}`, true);
+          }
+        } else {
+          liveNpc.sprite.setVelocity(0, 0);
+          liveNpc.sprite.anims.stop();
+          if (Math.abs(dx) > Math.abs(dy)) {
+            liveNpc.facing = dx > 0 ? 'right' : 'left';
+          } else {
+            liveNpc.facing = dy > 0 ? 'down' : 'up';
+          }
+          liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+        }
+      } else if (distToPlayer <= 42) {
+        liveNpc.sprite.setVelocity(0, 0);
+        liveNpc.sprite.anims.stop();
+        const dxP = this.player.x - liveNpc.sprite.x;
+        const dyP = this.player.y - liveNpc.sprite.y;
+        if (Math.abs(dxP) > Math.abs(dyP)) {
+          liveNpc.facing = dxP > 0 ? 'right' : 'left';
+        } else {
+          liveNpc.facing = dyP > 0 ? 'down' : 'up';
+        }
+        liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+      } else {
+        liveNpc.sprite.setVelocity(0, 0);
+        liveNpc.sprite.anims.stop();
+        liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+      }
+
+      liveNpc.sprite.setDepth(liveNpc.sprite.y);
+      liveNpc.badgeContainer.setPosition(liveNpc.sprite.x, liveNpc.sprite.y - 32);
+      liveNpc.badgeContainer.setDepth(liveNpc.sprite.y + 10);
+
+      // Keep interaction point synced
+      liveNpc.interactionPoint.x = liveNpc.sprite.x;
+      liveNpc.interactionPoint.y = liveNpc.sprite.y;
+      if (liveNpc.interactionPoint.npcData) {
+        liveNpc.interactionPoint.npcData.x = Math.round(liveNpc.sprite.x);
+        liveNpc.interactionPoint.npcData.y = Math.round(liveNpc.sprite.y);
+      }
+    }
+
     // Check Nearest Interaction Point
     let nearest: InteractionPoint | null = null;
     let minDistance = 999999;
@@ -662,6 +1162,36 @@ export class InteriorScene extends Phaser.Scene {
       sound.playChime();
     }
 
+    // Dropped items pickup in interior
+    const now = Date.now();
+    for (const [id, liveDrop] of this.droppedItems.entries()) {
+      if (now >= liveDrop.data.canPickupAt) {
+        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, liveDrop.data.x, liveDrop.data.y);
+        if (dist <= 34) {
+          const catalogItem = getCatalogItem(liveDrop.data.itemId);
+          if (catalogItem) {
+            const curInv = loadPlayerInventory();
+            const res = addItemToInventory(curInv, catalogItem, liveDrop.data.quantity);
+            if (res.success) {
+              sound.playInteractClick();
+              removeDroppedItem(id);
+              liveDrop.tween?.stop();
+              liveDrop.container.destroy();
+              this.droppedItems.delete(id);
+
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('jeeva:item-picked-up', {
+                    detail: { item: catalogItem, quantity: liveDrop.data.quantity },
+                  })
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (this.onStateChange) {
       this.onStateChange({
         playerX: Math.round(this.player.x),
@@ -672,6 +1202,8 @@ export class InteriorScene extends Phaser.Scene {
         activeInteraction: this.activeInteraction ? { ...this.activeInteraction } : null,
         isInsideInterior: true,
         interiorId: this.buildingId,
+        npcs: this.getNpcWorldStates(),
+        followingNpcId: this.followingNpcId,
       });
     }
   }

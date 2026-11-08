@@ -15,6 +15,7 @@ export interface PhaserGameRef {
   followPlayer: (npcId: string) => boolean;
   stopFollowing: (npcId?: string) => boolean;
   getFollowingNpc: () => string | null;
+  despawnNpc: (npcId: string) => boolean;
 }
 
 interface PhaserGameProps {
@@ -101,6 +102,14 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
         return current.getFollowingNpcId();
       }
       return null;
+    },
+    despawnNpc: (npcId: string) => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.despawnNpc) {
+        return current.despawnNpc(npcId);
+      }
+      return false;
     },
   }));
 

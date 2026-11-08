@@ -6,6 +6,12 @@
  */
 
 import { initialNPCDefinitions } from '../db/schema';
+import {
+  VILLAGE_ITEMS_CATALOG,
+  getCatalogItem,
+  getMerchantCatalogSummary,
+  type CatalogItem,
+} from './inventory';
 
 export interface NPCTraitsContext {
   id: string;
@@ -56,13 +62,20 @@ export async function getNPCTraits(npcId: string): Promise<NPCTraitsContext | nu
   };
 }
 
+export interface NPCDialogueToolResult {
+  tool: 'follow_player' | 'stop_following' | 'open_trade' | 'trade_deal' | 'go_home';
+  itemId?: string;
+  itemName?: string;
+  price?: number;
+}
+
 export interface DialogueGenerationResult {
   replyText: string;
   language: string;
   voice: string;
   modelUsed: string;
   latencyMs?: number;
-  toolCall?: 'follow_player' | 'stop_following' | 'open_trade';
+  toolCall?: NPCDialogueToolResult;
 }
 
 export const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
@@ -83,8 +96,43 @@ export const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
  * Builds the prompt using ONLY character traits (name, role, personality traits, speaking style).
  * ZERO story context, storms, disasters, or plot backstories.
  */
-function buildRowTraitsPrompt(traits: NPCTraitsContext, requestedLanguage: string): string {
+function buildRowTraitsPrompt(
+  traits: NPCTraitsContext,
+  requestedLanguage: string,
+  playerWallet?: number
+): string {
   const langName = LANGUAGE_DISPLAY_NAMES[requestedLanguage] || requestedLanguage;
+  const isMerchant = traits.id === 'dev_shopkeeper' || traits.id === 'arjun_mechanic';
+  const walletAmount = typeof playerWallet === 'number' ? playerWallet : 150;
+
+  let merchantSection = '';
+  if (isMerchant) {
+    const catalogSummary = getMerchantCatalogSummary(traits.id as 'dev_shopkeeper' | 'arjun_mechanic');
+    merchantSection = `
+SHOP INVENTORY & CONVERSATIONAL TRADING SYSTEM:
+You are a resident merchant/craftsman in Kaveripura. You conduct business STRICTLY through voice/text conversation.
+Here are the items available in your shop inventory:
+${catalogSummary}
+
+The player currently has ₹${walletAmount} in their wallet.
+
+CONVERSATIONAL TRADING RULES:
+1. Inquiring items/prices: If the player asks what you sell, prices, or if you have an item, answer warmly in character describing your wares and their base prices.
+2. Negotiating/Haggling: If the player asks for a discount or offers a lower price (e.g. offers 10-20% less):
+   - You can negotiate! You can accept reasonable offers or counter-offer if it's too low.
+3. Finalizing a Purchase / Deal:
+   If the player explicitly agrees to buy, asks to purchase, hands over money, or accepts a deal:
+   (e.g., "I want to buy the copper coil", "Here is ₹90", "Okay deal", "Dedo 80 me", "Kharidna hai", "Ye lo paise", "Spanner set de do"):
+   - If player has enough money (agreed price <= ₹${walletAmount}):
+     1. Accept the deal enthusiastically! State that you have taken their rupees and placed/dropped the item right in front of them on the ground or counter for them to pick up. (e.g., "Deal pakka! ₹90 me copper coil tumhari. Maine samne zameen pe rakh di hai, utha lo!")
+     2. MUST append at the very end of your response:
+        [TOOL: trade_deal, item: <item_id>, price: <agreed_price>]
+        Example: [TOOL: trade_deal, item: copper_induction_coil, price: 90]
+   - If player DOES NOT have enough money (agreed price > ₹${walletAmount}):
+     Refuse politely in character and state that they only have ₹${walletAmount} which is not enough. Do NOT append the tool tag.
+`;
+  }
+
   return `You are roleplaying as ${traits.name}, a village resident.
 Character traits from the 'npc_definitions' database table:
 - Name: ${traits.name}
@@ -101,9 +149,10 @@ STRICT CONSTRAINTS:
 6. Output ONLY the spoken words. No quotation marks, no character name prefix.
 
 AVAILABLE TOOLS & ACTIONS:
-- If the player asks or invites you to follow them (e.g. "follow me", "mere saath aao", "chalo saath", "come with me"), accept enthusiastically and append "[TOOL: follow_player]" at the very end of your response.
+- If the player asks or invites you to follow them (e.g. "follow me", "mere saath aao", "chalo saath", "come with me", "chalo bahar", "bahar chalo", "come outside"), accept enthusiastically and append "[TOOL: follow_player]" at the very end of your response.
 - If the player asks you to stop following or stay (e.g. "stay here", "ruko yahan", "stop following", "wait here"), acknowledge politely and append "[TOOL: stop_following]" at the very end.
-- If you are a merchant or mechanic (or if the player asks to trade, negotiate prices, buy, or sell items), invite them to do business and append "[TOOL: open_trade]" at the very end.`;
+- If the player tells you to return home or go back inside your building (e.g. "go home", "go back inside", "ghar jao", "dukan jao", "wapas jao", "go to your shop"), acknowledge politely and append "[TOOL: go_home]" at the very end.
+${merchantSection}`;
 }
 
 /**
@@ -113,11 +162,12 @@ AVAILABLE TOOLS & ACTIONS:
 export async function generateNPCDialogue(
   traits: NPCTraitsContext,
   playerMessage: string,
-  preferredLanguage?: string
+  preferredLanguage?: string,
+  playerWallet?: number
 ): Promise<DialogueGenerationResult> {
   const lang = preferredLanguage || traits.default_language || 'hi-IN';
   const voice = traits.assignedVoice;
-  const systemPrompt = buildRowTraitsPrompt(traits, lang);
+  const systemPrompt = buildRowTraitsPrompt(traits, lang, playerWallet);
 
   // 1. Dynamic LLM Generation via Groq (Ultra-low latency, flagship multilingual Indic support)
   const groqApiKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : '';
@@ -158,11 +208,11 @@ export async function generateNPCDialogue(
           let rawReply = data.choices?.[0]?.message?.content?.trim() || '';
           const latencyMs = Date.now() - startTime;
 
-          const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id);
+          const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
           const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
 
           if (finalReply) {
-            console.log(`[LLM Response] Groq ${model} (${latencyMs}ms): "${finalReply}" [Tool: ${toolCall || 'none'}]`);
+            console.log(`[LLM Response] Groq ${model} (${latencyMs}ms): "${finalReply}" [Tool: ${toolCall ? JSON.stringify(toolCall) : 'none'}]`);
             return {
               replyText: finalReply,
               language: lang,
@@ -206,11 +256,11 @@ export async function generateNPCDialogue(
         const data = await res.json();
         let rawReply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
         const latencyMs = Date.now() - startTime;
-        const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id);
+        const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
         const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
 
         if (finalReply) {
-          console.log(`[LLM Response] Gemini 1.5 Flash (${latencyMs}ms): "${rawReply}" [Tool: ${toolCall || 'none'}]`);
+          console.log(`[LLM Response] Gemini 1.5 Flash (${latencyMs}ms): "${rawReply}" [Tool: ${toolCall ? JSON.stringify(toolCall) : 'none'}]`);
           return {
             replyText: finalReply,
             language: lang,
@@ -238,59 +288,165 @@ export async function generateNPCDialogue(
 export function detectToolAndClean(
   rawText: string,
   playerMessage: string,
-  npcId: string
-): { cleanedText: string; toolCall?: 'follow_player' | 'stop_following' | 'open_trade' } {
-  let toolCall: 'follow_player' | 'stop_following' | 'open_trade' | undefined;
+  npcId: string,
+  playerWallet?: number
+): { cleanedText: string; toolCall?: NPCDialogueToolResult } {
+  let toolCall: NPCDialogueToolResult | undefined;
 
   // 1. Check explicit tool tags in LLM output
-  if (/\[TOOL:\s*follow_player\]/i.test(rawText)) {
-    toolCall = 'follow_player';
+  const tradeMatch = rawText.match(
+    /\[TOOL:\s*trade_deal(?:,\s*item:\s*([a-z0-9_]+))?(?:,\s*price:\s*(\d+))?\]/i
+  );
+  if (tradeMatch) {
+    const rawItemId = tradeMatch[1]?.trim().toLowerCase();
+    const rawPrice = tradeMatch[2] ? parseInt(tradeMatch[2], 10) : undefined;
+    const catalogItem = rawItemId ? getCatalogItem(rawItemId) : undefined;
+    toolCall = {
+      tool: 'trade_deal',
+      itemId: catalogItem?.id || rawItemId || 'copper_induction_coil',
+      itemName: catalogItem?.name || 'Item',
+      price: rawPrice || catalogItem?.basePrice || 50,
+    };
+  } else if (/\[TOOL:\s*follow_player\]/i.test(rawText)) {
+    toolCall = { tool: 'follow_player' };
   } else if (/\[TOOL:\s*stop_following\]/i.test(rawText)) {
-    toolCall = 'stop_following';
+    toolCall = { tool: 'stop_following' };
+  } else if (/\[TOOL:\s*go_home\]/i.test(rawText)) {
+    toolCall = { tool: 'go_home' };
   } else if (/\[TOOL:\s*open_trade\]/i.test(rawText)) {
-    toolCall = 'open_trade';
+    toolCall = { tool: 'open_trade' };
   }
 
-  // 2. Fallback smart intent detection based on player request
+  // 2. Fallback smart intent detection based on player request and conversation context
   if (!toolCall) {
     const p = playerMessage.toLowerCase();
+    const r = rawText.toLowerCase();
+
     if (
       p.includes('follow me') ||
       p.includes('mere saath') ||
       p.includes('chalo saath') ||
+      p.includes('chalo mere saath') ||
+      p.includes('saath chalo') ||
+      p.includes('saath aao') ||
       p.includes('piche aao') ||
       p.includes('peeche aao') ||
-      p.includes('come with me')
+      p.includes('peeche chalo') ||
+      p.includes('piche chalo') ||
+      p.includes('come with me') ||
+      p.includes('come along') ||
+      p.includes('walk with me') ||
+      p.includes('chalo bahar') ||
+      p.includes('bahar chalo') ||
+      p.includes('come outside')
     ) {
-      toolCall = 'follow_player';
+      toolCall = { tool: 'follow_player' };
     } else if (
       p.includes('stop following') ||
       p.includes('stay here') ||
-      p.includes('ruko yahan') ||
-      p.includes('ruko') ||
       p.includes('wait here') ||
-      p.includes('mat aao')
+      p.includes('ruko yahan') ||
+      p.includes('yahin ruko') ||
+      p.includes('yahan ruko') ||
+      p.includes('ruk jao') ||
+      p.includes('mat aao') ||
+      p.includes('mat chalo') ||
+      p.includes("don't follow")
     ) {
-      toolCall = 'stop_following';
+      toolCall = { tool: 'stop_following' };
     } else if (
-      (npcId === 'dev_shopkeeper' || npcId === 'arjun_mechanic') &&
-      (p.includes('trade') ||
-        p.includes('buy') ||
-        p.includes('sell') ||
-        p.includes('negotiate') ||
-        p.includes('kharid') ||
-        p.includes('bech') ||
-        p.includes('sauda') ||
-        p.includes('dukan') ||
-        p.includes('bhav') ||
-        p.includes('price'))
+      p.includes('go home') ||
+      p.includes('go back inside') ||
+      p.includes('go back home') ||
+      p.includes('ghar jao') ||
+      p.includes('dukan jao') ||
+      p.includes('wapas jao') ||
+      p.includes('apne ghar jao') ||
+      p.includes('apni dukan jao')
     ) {
-      toolCall = 'open_trade';
+      toolCall = { tool: 'go_home' };
+    } else if (npcId === 'dev_shopkeeper' || npcId === 'arjun_mechanic') {
+      const merchantItems = VILLAGE_ITEMS_CATALOG.filter(
+        (i) => i.sellerId === npcId || i.sellerId === 'both'
+      );
+
+      // Check which item is being referenced
+      let matchedItem = merchantItems.find((item) => {
+        const idParts = item.id.split('_');
+        const nameParts = item.name.toLowerCase().split(' ');
+        const inP =
+          nameParts.some((w) => w.length > 3 && p.includes(w)) ||
+          idParts.some((w) => w.length > 3 && p.includes(w));
+        const inR =
+          nameParts.some((w) => w.length > 3 && r.includes(w)) ||
+          idParts.some((w) => w.length > 3 && r.includes(w));
+        return inP || inR;
+      });
+
+      // Special keyword aliases
+      if (!matchedItem) {
+        if (p.includes('coil') || r.includes('coil')) matchedItem = getCatalogItem('copper_induction_coil');
+        else if (p.includes('spanner') || p.includes('tool') || p.includes('pana') || p.includes('aujar') || r.includes('spanner')) matchedItem = getCatalogItem('mechanic_toolset');
+        else if (p.includes('wire') || p.includes('taar') || r.includes('wire')) matchedItem = getCatalogItem('insulated_copper_wire');
+        else if (p.includes('solder') || r.includes('solder')) matchedItem = getCatalogItem('soldering_kit');
+        else if (p.includes('gear') || p.includes('chakra') || r.includes('gear')) matchedItem = getCatalogItem('brass_gears');
+        else if (p.includes('bolt') || p.includes('nut') || r.includes('bolt')) matchedItem = getCatalogItem('iron_fasteners');
+        else if (p.includes('sheet') || p.includes('metal') || p.includes('tin') || p.includes('chadar')) matchedItem = getCatalogItem('sheet_metal');
+        else if (p.includes('kerosene') || p.includes('canister') || p.includes('fuel') || p.includes('tel')) matchedItem = getCatalogItem('kerosene_canister');
+        else if (p.includes('lantern') || p.includes('lalten')) matchedItem = getCatalogItem('earthen_lantern');
+        else if (p.includes('salt') || p.includes('namak')) matchedItem = getCatalogItem('rock_salt_bag');
+        else if (p.includes('wheat') || p.includes('gehu') || p.includes('gehun')) matchedItem = getCatalogItem('wheat_grain_sack');
+        else if (p.includes('bandage') || p.includes('patti')) matchedItem = getCatalogItem('sterile_bandages');
+        else if (p.includes('salve') || p.includes('lep') || p.includes('neem')) matchedItem = getCatalogItem('antiseptic_salve');
+        else if (p.includes('compass') || p.includes('disha')) matchedItem = getCatalogItem('pocket_compass');
+        else if (p.includes('backpack') || p.includes('bag') || p.includes('jhola')) matchedItem = getCatalogItem('canvas_backpack');
+      }
+
+      const isBuyingIntent =
+        p.includes('buy') ||
+        p.includes('kharid') ||
+        p.includes('chahiye') ||
+        p.includes('de do') ||
+        p.includes('give me') ||
+        p.includes('here is') ||
+        p.includes('ye lo') ||
+        p.includes('deal') ||
+        p.includes('pack kar') ||
+        p.includes('purchase') ||
+        p.includes("i'll take") ||
+        p.includes('le leta hoon') ||
+        p.includes('le raha hoon') ||
+        r.includes('deal') ||
+        r.includes('sauda pakka') ||
+        r.includes('rakh di') ||
+        r.includes('utha lo') ||
+        r.includes('yours for') ||
+        r.includes('here you go');
+
+      const isJustAskingPrice =
+        (p.includes('kitne') || p.includes('how much') || p.includes('price') || p.includes('bhav')) &&
+        !p.includes('de do') &&
+        !p.includes('ye lo') &&
+        !p.includes('deal') &&
+        !p.includes('buy') &&
+        !p.includes('kharid');
+
+      if (matchedItem && isBuyingIntent && !isJustAskingPrice) {
+        const priceMatch = (p + ' ' + r).match(/(?:₹|rs\.?|rupees?|\b)(\d{2,4})\b/i);
+        const extractedPrice = priceMatch ? parseInt(priceMatch[1], 10) : matchedItem.basePrice;
+
+        toolCall = {
+          tool: 'trade_deal',
+          itemId: matchedItem.id,
+          itemName: matchedItem.name,
+          price: extractedPrice,
+        };
+      }
     }
   }
 
-  // Remove the [TOOL: ...] tag so it's not spoken aloud by TTS or shown in raw subtitles
-  let cleaned = rawText.replace(/\[TOOL:\s*\w+\]/gi, '').trim();
+  // Remove the [TOOL: ...] tag completely so it's not spoken aloud by TTS or shown in raw subtitles
+  let cleaned = rawText.replace(/\[TOOL:\s*[^\]]+\]/gi, '').trim();
   return { cleanedText: cleaned, toolCall };
 }
 

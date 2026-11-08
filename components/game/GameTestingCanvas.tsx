@@ -24,8 +24,6 @@ import {
   Mic,
   AlertTriangle,
   Loader2,
-  Package,
-  ShoppingBag,
 } from 'lucide-react';
 import { PhaserGame, PhaserGameRef } from './PhaserGame';
 import { GameStateEvent, InteractionPoint, NPCWorldState } from './types';
@@ -34,7 +32,15 @@ import PixelSprite from '../PixelSprite';
 import { formatMinutesToTime } from './npcData';
 import { WavRecorder } from '@/lib/wavRecorder';
 import { MinecraftInventoryModal, MinecraftHotbar } from './MinecraftInventoryModal';
-import { TradeNegotiationModal } from './TradeNegotiationModal';
+import {
+  loadPlayerInventory,
+  removeItemFromSlot,
+  addDroppedItem,
+  loadPlayerWallet,
+  savePlayerWallet,
+  getCatalogItem,
+} from '@/lib/inventory';
+import { setNpcLocation, resetNpcLocation } from '@/lib/npcLocations';
 
 export default function GameTestingCanvas() {
   const gameRef = useRef<PhaserGameRef>(null);
@@ -94,16 +100,10 @@ export default function GameTestingCanvas() {
   const [isClockPaused, setIsClockPaused] = useState<boolean>(false);
   const [timeSliderValue, setTimeSliderValue] = useState<number>(570);
 
-  // Minecraft-Style Inventory & Trading State
+  // Minecraft-Style Inventory & Dialogue Chat State
   const [isInventoryOpen, setIsInventoryOpen] = useState<boolean>(false);
   const [selectedHotbarIndex, setSelectedHotbarIndex] = useState<number>(0);
-  const [tradeModal, setTradeModal] = useState<{
-    isOpen: boolean;
-    merchantId: 'dev_shopkeeper' | 'arjun_mechanic';
-    merchantName: string;
-    merchantRole?: string;
-    merchantSpriteSrc?: string;
-  } | null>(null);
+  const [dialogueInputText, setDialogueInputText] = useState<string>('');
 
   // NPC Tool Use: Companion Following State
   const [followingNpcState, setFollowingNpcState] = useState<{
@@ -306,6 +306,7 @@ export default function GameTestingCanvas() {
       formData.append('npcId', targetNpc.id);
       formData.append('language', 'auto');
       formData.append('playerDistance', dist.toFixed(1));
+      formData.append('playerWallet', String(loadPlayerWallet()));
       formData.append('audio', audioBlob, 'speech.wav');
 
       const res = await fetch('/api/npc/talk', {
@@ -356,31 +357,59 @@ export default function GameTestingCanvas() {
         npcRole: data.npcRole || targetNpc.activityLabel || 'Villager',
       });
 
-      // 3. Process AI NPC Tool Use (follow_player, stop_following, open_trade)
+      // 3. Process AI NPC Tool Use (follow_player, stop_following, go_home, trade_deal)
       if (data.toolCall) {
         if (data.toolCall.tool === 'follow_player') {
-          gameRef.current?.followPlayer(data.toolCall.targetNpcId);
+          const targetId = data.toolCall.targetNpcId;
+          const targetLoc = gameState.isInsideInterior ? (gameState.interiorId || 'player_home') : 'village';
+          setNpcLocation(targetId, targetLoc);
+          gameRef.current?.followPlayer(targetId);
           setFollowingNpcState({
-            npcId: data.toolCall.targetNpcId,
+            npcId: targetId,
             name: data.npcName || targetNpc.name,
           });
           setToolToast(`🐾 ${data.npcName || targetNpc.name} is now following you!`);
           setTimeout(() => setToolToast(null), 4000);
+          sound.playQuestAccept();
         } else if (data.toolCall.tool === 'stop_following') {
           gameRef.current?.stopFollowing();
           setFollowingNpcState(null);
           setToolToast(`${data.npcName || targetNpc.name} stopped following.`);
           setTimeout(() => setToolToast(null), 4000);
-        } else if (data.toolCall.tool === 'open_trade') {
-          const isMerchant = targetNpc.id === 'dev_shopkeeper' || targetNpc.id === 'arjun_mechanic';
-          if (isMerchant) {
-            setTradeModal({
-              isOpen: true,
-              merchantId: targetNpc.id as 'dev_shopkeeper' | 'arjun_mechanic',
-              merchantName: targetNpc.name,
-              merchantRole: targetNpc.role,
-              merchantSpriteSrc: targetNpc.spriteSrc,
-            });
+          sound.playInteractClick();
+        } else if (data.toolCall.tool === 'go_home') {
+          const targetId = data.toolCall.targetNpcId;
+          resetNpcLocation(targetId);
+          gameRef.current?.despawnNpc(targetId);
+          if (followingNpcState?.npcId === targetId) {
+            setFollowingNpcState(null);
+          }
+          setToolToast(`🏡 ${data.npcName || targetNpc.name} is heading back home.`);
+          setTimeout(() => setToolToast(null), 4000);
+          sound.playInteractClick();
+        } else if (data.toolCall.tool === 'trade_deal') {
+          const { itemId, price, itemName } = data.toolCall;
+          const currentWallet = loadPlayerWallet();
+          const itemCatalog = itemId ? getCatalogItem(itemId) : undefined;
+          const resolvedName = itemName || itemCatalog?.name || 'Item';
+          const finalPrice = typeof price === 'number' && price > 0 ? price : (itemCatalog?.basePrice ?? 0);
+
+          if (currentWallet < finalPrice) {
+            sound.playDamageHurt();
+            setToolToast(`❌ Not enough rupees! Need ₹${finalPrice}, but you only have ₹${currentWallet}.`);
+            setTimeout(() => setToolToast(null), 4500);
+          } else {
+            savePlayerWallet(currentWallet - finalPrice);
+            const dropX = gameState.playerX;
+            const dropY = gameState.playerY + 12;
+            const currentScene = gameState.isInsideInterior ? (gameState.interiorId || 'shop') : 'village';
+
+            // Drop item into world with 0 delay so player can pick it up immediately
+            addDroppedItem(itemId || 'copper_induction_coil', 1, dropX, dropY, currentScene, 0);
+
+            sound.playQuestComplete();
+            setToolToast(`💰 Paid ₹${finalPrice}! ${targetNpc.name} dropped 1x ${resolvedName} on the ground! Walk over to pick it up.`);
+            setTimeout(() => setToolToast(null), 5000);
           }
         }
       }
@@ -403,7 +432,153 @@ export default function GameTestingCanvas() {
         setVoiceState((prev) => (prev.error ? { ...prev, error: null } : prev));
       }, 5000);
     }
-  }, [gameState.activeInteraction, gameState.playerX, gameState.playerY, voiceState.targetNpc]);
+  }, [gameState.activeInteraction, gameState.interiorId, gameState.isInsideInterior, gameState.playerX, gameState.playerY, voiceState.targetNpc]);
+
+  const handleSendTextDialogue = useCallback(async (text: string) => {
+    const targetNpc =
+      voiceState.targetNpc ||
+      (gameState.activeInteraction?.type === 'npc' ? gameState.activeInteraction.npcData : null) ||
+      (subtitleState?.npcName
+        ? gameState.npcs?.find((n) => n.name.toLowerCase() === subtitleState.npcName.toLowerCase())
+        : null);
+
+    if (!targetNpc) {
+      setVoiceState((prev) => ({
+        ...prev,
+        error: 'Step closer to an NPC to talk.',
+      }));
+      setTimeout(() => setVoiceState((prev) => ({ ...prev, error: null })), 3000);
+      return;
+    }
+
+    setVoiceState((prev) => ({ ...prev, status: 'processing', error: null }));
+
+    try {
+      const dist = Math.hypot(gameState.playerX - targetNpc.x, gameState.playerY - targetNpc.y);
+      const res = await fetch('/api/npc/talk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          npcId: targetNpc.id,
+          message: text,
+          language: 'auto',
+          playerDistance: dist,
+          playerWallet: loadPlayerWallet(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to talk with NPC');
+      }
+
+      if (data.audioBase64) {
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause();
+          currentAudioRef.current = null;
+        }
+        const audio = new Audio(`data:audio/wav;base64,${data.audioBase64}`);
+        currentAudioRef.current = audio;
+        audio.onplay = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: true } : null));
+        };
+        audio.onended = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+          if (subtitleDismissTimerRef.current) clearTimeout(subtitleDismissTimerRef.current);
+          subtitleDismissTimerRef.current = setTimeout(() => {
+            setSubtitleState(null);
+          }, 8000);
+        };
+        audio.onerror = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+        };
+        audio.play().catch((playErr) => console.warn('Audio play error:', playErr));
+      }
+
+      setSubtitleState({
+        playerText: data.playerText,
+        npcName: data.npcName || targetNpc.name,
+        replyText: data.replyText,
+        language: data.language,
+        audioBase64: data.audioBase64 || undefined,
+        isPlayingAudio: Boolean(data.audioBase64),
+        npcSpriteSrc: targetNpc.spriteSrc,
+        npcRole: data.npcRole || targetNpc.activityLabel || 'Villager',
+      });
+
+      if (data.toolCall) {
+        if (data.toolCall.tool === 'follow_player') {
+          const targetId = data.toolCall.targetNpcId;
+          const targetLoc = gameState.isInsideInterior ? (gameState.interiorId || 'player_home') : 'village';
+          setNpcLocation(targetId, targetLoc);
+          gameRef.current?.followPlayer(targetId);
+          setFollowingNpcState({
+            npcId: targetId,
+            name: data.npcName || targetNpc.name,
+          });
+          setToolToast(`🐾 ${data.npcName || targetNpc.name} is now following you!`);
+          setTimeout(() => setToolToast(null), 4000);
+          sound.playQuestAccept();
+        } else if (data.toolCall.tool === 'stop_following') {
+          gameRef.current?.stopFollowing();
+          setFollowingNpcState(null);
+          setToolToast(`${data.npcName || targetNpc.name} stopped following.`);
+          setTimeout(() => setToolToast(null), 4000);
+          sound.playInteractClick();
+        } else if (data.toolCall.tool === 'go_home') {
+          const targetId = data.toolCall.targetNpcId;
+          resetNpcLocation(targetId);
+          gameRef.current?.despawnNpc(targetId);
+          if (followingNpcState?.npcId === targetId) {
+            setFollowingNpcState(null);
+          }
+          setToolToast(`🏡 ${data.npcName || targetNpc.name} is heading back home.`);
+          setTimeout(() => setToolToast(null), 4000);
+          sound.playInteractClick();
+        } else if (data.toolCall.tool === 'trade_deal') {
+          const { itemId, price, itemName } = data.toolCall;
+          const currentWallet = loadPlayerWallet();
+          const itemCatalog = itemId ? getCatalogItem(itemId) : undefined;
+          const resolvedName = itemName || itemCatalog?.name || 'Item';
+          const finalPrice = typeof price === 'number' && price > 0 ? price : (itemCatalog?.basePrice ?? 0);
+
+          if (currentWallet < finalPrice) {
+            sound.playDamageHurt();
+            setToolToast(`❌ Not enough rupees! Need ₹${finalPrice}, but you have ₹${currentWallet}.`);
+            setTimeout(() => setToolToast(null), 4500);
+          } else {
+            savePlayerWallet(currentWallet - finalPrice);
+            const dropX = gameState.playerX;
+            const dropY = gameState.playerY + 12;
+            const currentScene = gameState.isInsideInterior ? (gameState.interiorId || 'shop') : 'village';
+
+            addDroppedItem(itemId || 'copper_induction_coil', 1, dropX, dropY, currentScene, 0);
+            sound.playQuestComplete();
+            setToolToast(`💰 Paid ₹${finalPrice}! ${targetNpc.name} dropped 1x ${resolvedName} on the ground! Walk over to pick it up.`);
+            setTimeout(() => setToolToast(null), 5000);
+          }
+        }
+      }
+
+      setVoiceState({
+        status: 'idle',
+        recordingSeconds: 0,
+        error: null,
+        targetNpc: null,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setVoiceState({
+        status: 'idle',
+        recordingSeconds: 0,
+        error: msg,
+        targetNpc: null,
+      });
+      setTimeout(() => {
+        setVoiceState((prev) => (prev.error ? { ...prev, error: null } : prev));
+      }, 5000);
+    }
+  }, [gameState.activeInteraction, gameState.interiorId, gameState.isInsideInterior, gameState.npcs, gameState.playerX, gameState.playerY, subtitleState?.npcName, voiceState.targetNpc]);
 
   const handleTriggerInteraction = useCallback(() => {
     if (gameState.activeInteraction) {
@@ -430,6 +605,8 @@ export default function GameTestingCanvas() {
   }, [gameState.activeInteraction]);
 
   const handleCommandFollow = useCallback((npcId: string, npcName: string) => {
+    const targetLoc = gameState.isInsideInterior ? (gameState.interiorId || 'player_home') : 'village';
+    setNpcLocation(npcId, targetLoc);
     const ok = gameRef.current?.followPlayer(npcId);
     if (ok) {
       setFollowingNpcState({ npcId, name: npcName });
@@ -437,7 +614,7 @@ export default function GameTestingCanvas() {
       setTimeout(() => setToolToast(null), 4000);
       sound.playQuestAccept();
     }
-  }, []);
+  }, [gameState.interiorId, gameState.isInsideInterior]);
 
   const handleCommandStopFollowing = useCallback(() => {
     gameRef.current?.stopFollowing();
@@ -445,21 +622,6 @@ export default function GameTestingCanvas() {
     setToolToast('Companion returned to routine.');
     setTimeout(() => setToolToast(null), 3000);
     sound.playInteractClick();
-  }, []);
-
-  const handleOpenTradeForNpc = useCallback((npc: NPCWorldState) => {
-    const isMerchant = npc.id === 'dev_shopkeeper' || npc.id === 'arjun_mechanic';
-    if (isMerchant) {
-      setTradeModal({
-        isOpen: true,
-        merchantId: npc.id as 'dev_shopkeeper' | 'arjun_mechanic',
-        merchantName: npc.name,
-        merchantRole: npc.role,
-        merchantSpriteSrc: npc.spriteSrc,
-      });
-      setInspectModal(null);
-      setSubtitleState(null);
-    }
   }, []);
 
   const handleSetPresetTime = (minutes: number) => {
@@ -517,13 +679,44 @@ export default function GameTestingCanvas() {
       if (e.key === 'r' || e.key === 'R') {
         setShowRoster((prev) => !prev);
       }
-      if (e.key === 'i' || e.key === 'I' || e.key === 'b' || e.key === 'B') {
+      // KEY E (also I/B): Opens / Closes Full 15-Slot Minecraft Inventory
+      if (
+        e.key === 'e' ||
+        e.key === 'E' ||
+        e.key === 'i' ||
+        e.key === 'I' ||
+        e.key === 'b' ||
+        e.key === 'B'
+      ) {
         setIsInventoryOpen((prev) => !prev);
+        sound.playInteractClick();
       }
       if (['1', '2', '3', '4', '5'].includes(e.key)) {
         setSelectedHotbarIndex(parseInt(e.key, 10) - 1);
       }
-      if (e.key === 'e' || e.key === 'E') {
+      // KEY Q: Drop selected hotbar item into world at player location (Minecraft-style)
+      if (e.key === 'q' || e.key === 'Q') {
+        if (!inspectModal && !isInventoryOpen && !showRoster && !showMinimap) {
+          const inv = loadPlayerInventory();
+          const slot = inv[selectedHotbarIndex];
+          if (slot && slot.item && slot.quantity > 0) {
+            const dropX = gameState.playerX;
+            const dropY = gameState.playerY + 12;
+            const currentScene = gameState.isInsideInterior ? (gameState.interiorId || 'shop') : 'village';
+
+            // Remove 1x from player inventory
+            removeItemFromSlot(inv, selectedHotbarIndex, 1);
+
+            // Add dropped world item with 3000ms pickup cooldown
+            addDroppedItem(slot.item.id, 1, dropX, dropY, currentScene, 3000);
+            sound.playInteractClick();
+            setToolToast(`Dropped 1x ${slot.item.name} (Pick up ready in 3s)`);
+            setTimeout(() => setToolToast(null), 3500);
+          }
+        }
+      }
+      // KEY F / Enter: Trigger Door / Chest / Landmark interaction
+      if (e.key === 'f' || e.key === 'F' || e.key === 'Enter') {
         if (gameState.activeInteraction) {
           if (gameState.activeInteraction.type === 'npc' && gameState.activeInteraction.npcData) {
             setVoiceState((prev) => ({
@@ -541,7 +734,6 @@ export default function GameTestingCanvas() {
         setShowMinimap(false);
         setShowRoster(false);
         setIsInventoryOpen(false);
-        setTradeModal(null);
         if (subtitleState) {
           if (currentAudioRef.current) {
             currentAudioRef.current.pause();
@@ -564,15 +756,56 @@ export default function GameTestingCanvas() {
       }
     };
 
+    const handleWheel = (e: WheelEvent) => {
+      // Don't cycle hotbar if mouse is hovering over a scrollable popup/list
+      const target = e.target as HTMLElement;
+      if (
+        target?.closest?.('.overflow-y-auto') ||
+        target?.closest?.('.overflow-auto') ||
+        inspectModal ||
+        isInventoryOpen ||
+        showRoster
+      ) {
+        return;
+      }
+
+      // Mouse wheel scroll: cycle 5 hotbar slots
+      setSelectedHotbarIndex((prev) => {
+        const next = e.deltaY > 0 ? (prev + 1) % 5 : (prev - 1 + 5) % 5;
+        return next;
+      });
+      sound.playInteractClick();
+    };
+
+    const handleItemPickedUp = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.item) {
+        setToolToast(`Picked up ${detail.quantity || 1}x ${detail.item.name}!`);
+        setTimeout(() => setToolToast(null), 3000);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('jeeva:item-picked-up', handleItemPickedUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('jeeva:item-picked-up', handleItemPickedUp);
     };
   }, [
     gameState.activeInteraction,
     gameState.isInsideInterior,
+    gameState.interiorId,
+    gameState.playerX,
+    gameState.playerY,
+    inspectModal,
+    isInventoryOpen,
+    showRoster,
+    showMinimap,
+    selectedHotbarIndex,
     handleTriggerInteraction,
     startVoiceRecording,
     stopVoiceRecordingAndSend,
@@ -701,20 +934,6 @@ export default function GameTestingCanvas() {
 
         {/* Right: Quick Action Controls Pill */}
         <div className="flex items-center gap-2 pointer-events-auto bg-[#14271A]/90 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-[#78A85B]/40 shadow-xl">
-          {/* Minecraft Inventory Button */}
-          <button
-            onClick={() => setIsInventoryOpen((prev) => !prev)}
-            title="Open 15-Slot Minecraft Inventory (Key: I)"
-            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded border transition font-pixel ${
-              isInventoryOpen
-                ? 'bg-[#315B3C] border-[#78A85B] text-[#F4D477]'
-                : 'bg-[#1F3B27] border-[#28392E] text-[#FFF8E9] hover:bg-[#315B3C]'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5 text-[#F4D477]" />
-            <span>Bag</span>
-          </button>
-
           {/* NPC Roster Button */}
           <button
             onClick={() => setShowRoster((prev) => !prev)}
@@ -790,17 +1009,11 @@ export default function GameTestingCanvas() {
 
       {/* 2B. FOLLOWER COMPANION STATUS HUD */}
       {followingNpcState && (
-        <div className="absolute top-18 left-1/2 -translate-x-1/2 z-30 pointer-events-auto bg-[#14271A]/95 backdrop-blur-md border-2 border-[#78A85B] rounded-full px-4 py-1.5 shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+        <div className="absolute top-18 left-1/2 -translate-x-1/2 z-30 pointer-events-none bg-[#14271A]/95 backdrop-blur-md border-2 border-[#78A85B] rounded-full px-4 py-1.5 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
           <span className="flex items-center gap-1.5 font-pixel text-xs text-[#F4D477] font-bold">
             <span className="animate-bounce">🐾</span>
-            <span>{followingNpcState.name} is following you</span>
+            <span>{followingNpcState.name} is following you (Say &quot;Stop following&quot; to release)</span>
           </span>
-          <button
-            onClick={handleCommandStopFollowing}
-            className="px-2.5 py-0.5 rounded bg-[#3A1414] hover:bg-[#521C1C] border border-[#E05252] text-[#FFC1C1] text-[10px] font-pixel transition cursor-pointer"
-          >
-            Stop Following
-          </button>
         </div>
       )}
 
@@ -951,115 +1164,58 @@ export default function GameTestingCanvas() {
             )}
           </div>
 
-          {/* Quick Tool Actions: Follow & Trade */}
-          {(() => {
-            const currentNpc =
-              gameState.npcs?.find((n) => n.name.toLowerCase() === subtitleState.npcName.toLowerCase()) ||
-              gameState.activeInteraction?.npcData;
-            const isMerchant = currentNpc?.id === 'dev_shopkeeper' || currentNpc?.id === 'arjun_mechanic';
-            const isCurrentlyFollowing =
-              followingNpcState?.name.toLowerCase() === subtitleState.npcName.toLowerCase() ||
-              (currentNpc && followingNpcState?.npcId === currentNpc.id);
-
-            return (
-              <div className="flex items-center gap-2 pt-2 mt-2 border-t border-[#28392E]">
-                {/* Follow Tool Button */}
-                {isCurrentlyFollowing ? (
-                  <button
-                    onClick={handleCommandStopFollowing}
-                    className="px-2.5 py-1 rounded bg-[#3A1414] hover:bg-[#521C1C] border border-[#E05252] text-[#FFC1C1] font-pixel text-xs transition cursor-pointer flex items-center gap-1"
-                  >
-                    <span>🛑 Stop Following</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      if (currentNpc) {
-                        handleCommandFollow(currentNpc.id, currentNpc.name);
-                      }
-                    }}
-                    className="px-2.5 py-1 rounded bg-[#315B3C] hover:bg-[#78A85B] border border-[#78A85B] text-[#FFF8E9] font-pixel text-xs transition cursor-pointer flex items-center gap-1"
-                  >
-                    <span>🐾 Follow Me (साथ चलो)</span>
-                  </button>
-                )}
-
-                {/* Trade Tool Button for Shopkeeper & Mechanic */}
-                {isMerchant && currentNpc && (
-                  <button
-                    onClick={() => handleOpenTradeForNpc(currentNpc)}
-                    className="px-2.5 py-1 rounded bg-[#F4D477] hover:bg-[#ffe188] text-[#0F1712] font-pixel text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow"
-                  >
-                    <ShoppingBag className="w-3.5 h-3.5" />
-                    <span>Trade & Negotiate (मोलभाव)</span>
-                  </button>
-                )}
-              </div>
-            );
-          })()}
+          {/* Conversational input: Speak with Space OR type message here */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (dialogueInputText.trim()) {
+                handleSendTextDialogue(dialogueInputText.trim());
+                setDialogueInputText('');
+              }
+            }}
+            className="flex items-center gap-2 pt-2 mt-2 border-t border-[#28392E]"
+          >
+            <input
+              type="text"
+              value={dialogueInputText}
+              onChange={(e) => setDialogueInputText(e.target.value)}
+              placeholder='Type message or trade (e.g. "Buy copper coil", "Coil kitne ki hai?", "Follow me")...'
+              className="flex-1 bg-[#0F1712] border border-[#28392E] rounded px-3 py-1.5 text-xs text-[#FFF8E9] placeholder-[#BAC9B9]/50 focus:outline-hidden focus:border-[#F4D477]"
+            />
+            <button
+              type="submit"
+              className="px-3 py-1.5 rounded bg-[#F4D477] hover:bg-[#ffe188] text-[#0F1712] font-pixel text-xs font-bold transition cursor-pointer"
+            >
+              Send
+            </button>
+          </form>
         </div>
       )}
 
       {/* 3E. Proximity Interaction Banner (When near NPC or Object) */}
       {gameState.activeInteraction && voiceState.status === 'idle' && !subtitleState && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 animate-bounce">
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 animate-bounce">
           {gameState.activeInteraction.type === 'npc' && gameState.activeInteraction.npcData ? (
-            <>
-              <div
-                onPointerDown={() => {
-                  if (gameState.activeInteraction?.npcData) {
-                    startVoiceRecording(gameState.activeInteraction.npcData);
-                  }
-                }}
-                onPointerUp={stopVoiceRecordingAndSend}
-                onPointerLeave={() => {
-                  if (isRecordingRef.current) stopVoiceRecordingAndSend();
-                }}
-                className="px-4 py-2 bg-[#14271A]/95 border-2 border-[#F4D477] text-[#FFF8E9] hover:bg-[#1F3B27] rounded-lg shadow-2xl flex items-center gap-2.5 text-sm font-pixel ring-2 ring-[#F4D477]/40 transition cursor-pointer select-none"
-              >
-                <Mic className="w-4 h-4 text-[#F4D477]" />
-                <span>
-                  Hold <span className="px-2 py-0.5 rounded bg-[#F4D477] text-[#0F1712] font-bold text-xs tracking-wider">
-                  SPACE
-                </span> to talk with{' '}
-                  <strong className="text-[#F4D477]">{gameState.activeInteraction.name}</strong>
-                </span>
-              </div>
-
-              {/* Quick Trade Button if Shopkeeper or Mechanic */}
-              {(gameState.activeInteraction.npcData.id === 'dev_shopkeeper' ||
-                gameState.activeInteraction.npcData.id === 'arjun_mechanic') && (
-                <button
-                  onClick={() => handleOpenTradeForNpc(gameState.activeInteraction!.npcData!)}
-                  className="px-3.5 py-2 bg-[#F4D477] hover:bg-[#ffe188] text-[#0F1712] border-2 border-[#F4D477] font-pixel text-xs font-bold rounded-lg shadow-2xl flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>Trade</span>
-                </button>
-              )}
-
-              {/* Follow Button */}
-              {followingNpcState?.npcId === gameState.activeInteraction.npcData.id ? (
-                <button
-                  onClick={handleCommandStopFollowing}
-                  className="px-3 py-2 bg-[#3A1414] hover:bg-[#521C1C] border-2 border-[#E05252] text-[#FFC1C1] font-pixel text-xs rounded-lg shadow-2xl transition cursor-pointer"
-                >
-                  🛑 Unfollow
-                </button>
-              ) : (
-                <button
-                  onClick={() =>
-                    handleCommandFollow(
-                      gameState.activeInteraction!.npcData!.id,
-                      gameState.activeInteraction!.npcData!.name
-                    )
-                  }
-                  className="px-3 py-2 bg-[#315B3C] hover:bg-[#78A85B] border-2 border-[#78A85B] text-[#FFF8E9] font-pixel text-xs rounded-lg shadow-2xl transition cursor-pointer flex items-center gap-1"
-                >
-                  <span>🐾 Follow</span>
-                </button>
-              )}
-            </>
+            <div
+              onPointerDown={() => {
+                if (gameState.activeInteraction?.npcData) {
+                  startVoiceRecording(gameState.activeInteraction.npcData);
+                }
+              }}
+              onPointerUp={stopVoiceRecordingAndSend}
+              onPointerLeave={() => {
+                if (isRecordingRef.current) stopVoiceRecordingAndSend();
+              }}
+              className="px-4 py-2 bg-[#14271A]/95 border-2 border-[#F4D477] text-[#FFF8E9] hover:bg-[#1F3B27] rounded-lg shadow-2xl flex items-center gap-2.5 text-sm font-pixel ring-2 ring-[#F4D477]/40 transition cursor-pointer select-none"
+            >
+              <Mic className="w-4 h-4 text-[#F4D477]" />
+              <span>
+                Hold <span className="px-2 py-0.5 rounded bg-[#F4D477] text-[#0F1712] font-bold text-xs tracking-wider">
+                SPACE
+              </span> to talk with{' '}
+                <strong className="text-[#F4D477]">{gameState.activeInteraction.name}</strong>
+              </span>
+            </div>
           ) : (
             <button
               onClick={handleTriggerInteraction}
@@ -1071,7 +1227,7 @@ export default function GameTestingCanvas() {
               }`}
             >
               <span className="w-6 h-6 rounded bg-[#F4D477] text-[#0F1712] font-bold flex items-center justify-center text-xs">
-                E
+                F
               </span>
               <span>
                 {gameState.activeInteraction.actionLabel || 'Interact'}:{' '}
@@ -1099,13 +1255,19 @@ export default function GameTestingCanvas() {
             <span className="text-[#93C476] font-mono">Hold Space</span>: Push-to-Talk (NPC)
           </div>
           <div>
-            <span className="text-[#93C476] font-mono">E</span>: Open Doors / Inspect
+            <span className="text-[#93C476] font-mono">Q</span>: Drop Item
           </div>
           <div>
-            <span className="text-[#93C476] font-mono">R</span>: Villager Roster
+            <span className="text-[#93C476] font-mono">E</span>: Full Inventory
           </div>
           <div>
-            <span className="text-[#93C476] font-mono">M</span>: Village Map
+            <span className="text-[#93C476] font-mono">Scroll / 1-5</span>: Hotbar
+          </div>
+          <div>
+            <span className="text-[#93C476] font-mono">F / Enter</span>: Open / Inspect
+          </div>
+          <div>
+            <span className="text-[#93C476] font-mono">R / M</span>: Roster / Map
           </div>
         </div>
       </div>
@@ -1251,39 +1413,6 @@ export default function GameTestingCanvas() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Follow Tool Button */}
-                  {followingNpcState?.npcId === inspectModal.npcData.id ? (
-                    <button
-                      onClick={handleCommandStopFollowing}
-                      className="px-3 py-1.5 bg-[#3A1414] hover:bg-[#521C1C] border border-[#E05252] text-[#FFC1C1] font-pixel text-xs rounded transition cursor-pointer"
-                    >
-                      🛑 Unfollow
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        if (inspectModal.npcData) {
-                          handleCommandFollow(inspectModal.npcData.id, inspectModal.npcData.name);
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-[#315B3C] hover:bg-[#78A85B] border border-[#78A85B] text-white font-pixel text-xs rounded transition cursor-pointer flex items-center gap-1"
-                    >
-                      <span>🐾 Follow Me</span>
-                    </button>
-                  )}
-
-                  {/* Trade Button for Dev and Arjun */}
-                  {(inspectModal.npcData.id === 'dev_shopkeeper' ||
-                    inspectModal.npcData.id === 'arjun_mechanic') && (
-                    <button
-                      onClick={() => handleOpenTradeForNpc(inspectModal.npcData!)}
-                      className="px-3 py-1.5 bg-[#F4D477] hover:bg-[#ffe188] text-black font-pixel text-xs font-bold rounded shadow transition cursor-pointer flex items-center gap-1"
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>Trade & Haggle</span>
-                    </button>
-                  )}
-
                   <button
                     onClick={() => {
                       if (inspectModal.npcData) {
@@ -1602,10 +1731,9 @@ export default function GameTestingCanvas() {
         </div>
       )}
 
-      {/* 8. MINECRAFT HUD HOTBAR (Bottom-right / Bottom-center) */}
-      <div className="absolute bottom-4 right-4 z-30 pointer-events-auto">
+      {/* 8. MINECRAFT HUD HOTBAR (Bottom-Middle like Minecraft) */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
         <MinecraftHotbar
-          onOpenInventory={() => setIsInventoryOpen(true)}
           selectedSlotIndex={selectedHotbarIndex}
           onSelectSlot={(idx) => setSelectedHotbarIndex(idx)}
         />
@@ -1618,18 +1746,6 @@ export default function GameTestingCanvas() {
         selectedHotbarIndex={selectedHotbarIndex}
         onSelectHotbarIndex={(idx) => setSelectedHotbarIndex(idx)}
       />
-
-      {/* 10. SHOPKEEPER & MECHANIC TRADING & NEGOTIATION MODAL */}
-      {tradeModal && (
-        <TradeNegotiationModal
-          isOpen={tradeModal.isOpen}
-          onClose={() => setTradeModal(null)}
-          merchantId={tradeModal.merchantId}
-          merchantName={tradeModal.merchantName}
-          merchantRole={tradeModal.merchantRole}
-          merchantSpriteSrc={tradeModal.merchantSpriteSrc}
-        />
-      )}
     </div>
   );
 }

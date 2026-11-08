@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
     let playerDistance: number | undefined;
     let language = 'auto';
     let messageText = '';
+    let playerWallet: number | undefined;
     let audioFile: Blob | null = null;
 
     if (contentType.includes('multipart/form-data')) {
@@ -23,6 +24,10 @@ export async function POST(req: NextRequest) {
       if (distStr) {
         playerDistance = parseFloat(distStr);
       }
+      const walletStr = formData.get('playerWallet') as string;
+      if (walletStr) {
+        playerWallet = parseFloat(walletStr);
+      }
       const file = formData.get('audio');
       if (file && typeof file === 'object' && 'arrayBuffer' in file) {
         audioFile = file as Blob;
@@ -33,6 +38,7 @@ export async function POST(req: NextRequest) {
       language = json.language || 'auto';
       messageText = json.message || '';
       playerDistance = json.playerDistance;
+      playerWallet = json.playerWallet;
     }
 
     if (!npcId) {
@@ -113,7 +119,8 @@ export async function POST(req: NextRequest) {
     const dialogueResult = await generateNPCDialogue(
       traits,
       transcribedText,
-      resolvedLanguage
+      resolvedLanguage,
+      playerWallet
     );
 
     // 3. Synthesize spoken audio for the NPC reply via Gnani TTS (Timbre v2.5)
@@ -148,9 +155,12 @@ export async function POST(req: NextRequest) {
       playerDistance,
       toolCall: dialogueResult.toolCall
         ? {
-            tool: dialogueResult.toolCall,
+            tool: dialogueResult.toolCall.tool,
             targetNpcId: traits.id,
             targetNpcName: traits.name,
+            itemId: dialogueResult.toolCall.itemId,
+            itemName: dialogueResult.toolCall.itemName,
+            price: dialogueResult.toolCall.price,
           }
         : null,
       apiDetails: {
