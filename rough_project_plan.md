@@ -22,17 +22,17 @@ world.
 
 ### Core experience
 
-- Explore a village using WASD movement.
-- Approach an NPC and start a voice conversation.
-- Speak in supported Indian languages using Gnani AI speech services.
-- Receive an NPC response with a distinct personality and voice.
-- Give NPCs commands such as follow, collect, protect, trade, or
-  coordinate.
-- Observe NPCs move and perform valid actions.
+- Explore a village using WASD movement while managing an active player inventory.
+- Carry physical items, tools, and machinery in the backpack and roam across the world.
+- Approach an NPC and start a natural voice or text conversation within a bounded threshold radius.
+- Speak in supported Indian languages using Gnani AI speech services (or text fallback).
+- Receive an NPC response powered by an LLM, bounded by character traits, role, and current state.
+- Engage in real-time, dynamic price negotiations with merchants, craftsmen, and villagers.
+- Give NPCs grounded commands such as follow, collect, repair, trade, or coordinate.
+- Observe NPCs perform real, server-validated actions in the Phaser game world.
 - Let NPCs converse with one another when the player is nearby.
-- Have NPCs remember important events and adjust relationships and
-  behavior.
-- Progress through a five-chapter village recovery story.
+- Have NPCs remember past events and adjust their emotional relationships and behavior.
+- Progress through structured **story levels** specifically engineered to showcase all game features step-by-step (starting with Level 1: The Broken Clinic Machine quest).
 
 ### Product principles
 
@@ -55,31 +55,27 @@ world.
 
 ### P0 --- Required playable prototype
 
-- [ ] Top-down village map and player movement.
-- [ ] Camera follows player; world scrolling and collision.
-- [ ] NPC sprites, animations, spawn points, and interaction zones.
-- [ ] Individual NPC dialogue powered by Gemini.
-- [ ] Gnani AI STT and TTS integration, subject to API access and
-      supported-language verification.
-- [ ] NPC profiles: identity, personality, role, voice/language
-      settings.
-- [ ] Basic short-term conversation context.
-- [ ] Persistent player/NPC memory for important events.
-- [ ] A small, validated set of NPC actions: move, follow, collect,
-      trade, and protect.
-- [ ] Chapter 1 and a demonstrable slice of Chapter 2.
-- [ ] Text input fallback if microphone, STT, or TTS fails.
+- [ ] Top-down village map and player movement with collision and sprint mechanics.
+- [ ] Camera follows player; world scrolling and boundary limits.
+- [ ] NPC sprites, directional animations, spawn points, and threshold interaction zones.
+- [ ] Individual NPC voice & text dialogue powered by LLM (Groq/Gemini).
+- [ ] Gnani AI STT and TTS integration with text input fallback.
+- [ ] NPC profiles & database definitions: identity, personality, core goals, speaking style, voice settings.
+- [ ] **Player Inventory System**: Grid/backpack storage, carrying items in hands/bag, weight limits, and world persistence while roaming.
+- [ ] **Dynamic Price Negotiation Engine**: Interactive dialogue bargaining for service fees (Mechanic) and item purchases (Shopkeeper).
+- [ ] **Grounded NPC Actions**: Visible server-validated actions (`inspect_machine`, `repair_machine`, `transfer_item`, `trade`).
+- [ ] **Level 1 End-to-End Vertical Slice**: The complete 7-step Medical Machine Repair quest (Hospital broken machine → Mechanic negotiation → Missing part discovery → Shopkeeper purchase negotiation → Mechanic repair assembly → Hospital return & completion).
+- [ ] Multi-step quest state tracker and objective HUD.
 
 ### P1 --- Main differentiators
 
-- [ ] NPC-to-NPC conversations triggered by proximity.
-- [ ] Group conversation with turn-taking.
-- [ ] NPC relationship scores and event-driven changes.
-- [ ] NPC schedules and simple autonomous goals.
-- [ ] Resource inventory and trading.
-- [ ] Multi-step tasks with progress and completion events.
-- [ ] Chapters 2--5 and consequence tracking.
-- [ ] NPC command interface and action status display.
+- [ ] Level 2: The Granary Crisis (Companion following with Priya, farming/clearing with Ravi, multi-resource barter).
+- [ ] Level 3: Shadows of Kaveripura (Day/night cycle, curfew patrol AI & interrogation with Inspector Vikram, stealth & lockpicking with Kalia).
+- [ ] Level 4: The Banyan Council Deliberation (NPC-to-NPC proximity dialogue, 4-NPC group conversation with turn-taking under Ramesh Kaka).
+- [ ] Level 5: The Resilient Village (Persistent Mem0 long-term memory, emergent consequences, multiple endings).
+- [ ] NPC relationship scores and event-driven reputation changes.
+- [ ] NPC daily schedules and autonomous waypoint routines.
+- [ ] NPC command interface and action status indicator.
 
 ### P2 --- Stretch goals
 
@@ -335,83 +331,90 @@ Phaser.
 
 ---
 
-NPC Role Personality Initial
-capabilities
-
----
-
-Main player Player character Player-controlled Move, speak,
-interact, command
-
-Player's wife Companion Lovely, flirty, Follow, help,
-kind converse, assist
-
-Ravi Farmer Hardworking, Collect food,
-stubborn manage farm,
-trade
-
-Meera Doctor Caring, practical Treat injured
-villagers,
-request supplies
-
-Arjun Mechanic Intelligent, Repair machines,
-impatient request parts
-
-Dev Shopkeeper Greedy, negotiator Manage stock,
-trade, set prices
-
-Ramesh Elder Wise, cautious Advise,
-coordinate
-villagers
-
-Policeman Law enforcement Observant, Investigate
-disciplined theft, protect
-locations
-
-Thief Antagonist Secretive, Steal only
-opportunistic through defined
-game rules
-
-Normal villagers Residents Varied Work, travel,
-converse, request
-help
-
-Friend group Social group Distinct individual Group
-traits conversations and
-shared events
+| NPC ID | Name | Role | Personality | Level 1 & Core Story Function | Core Allowed Actions |
+|---|---|---|---|---|---|
+| `player` | Player | Village Resident | Player-controlled | Roam world, carry inventory items, speak, negotiate, deliver | `move`, `speak`, `inventory_carry`, `negotiate`, `trade` |
+| `meera_doctor` | Dr. Meera | Clinic Doctor | Compassionate, clinical, urgent | **Level 1 Starter & Turn-in**: Identifies broken medical machine, tasks player, verifies repaired unit | `assign_machine_repair_quest`, `receive_repaired_machine`, `treat_injured`, `trade` |
+| `arjun_mechanic` | Arjun | Master Mechanic | Intelligent, impatient, proud craftsman | **Level 1 Mechanic**: Negotiates repair fee, diagnoses missing Copper Induction Coil, fixes machine with part | `inspect_machine`, `negotiate_price`, `request_missing_part`, `repair_machine`, `transfer_item` |
+| `dev_shopkeeper` | Dev | General Merchant | Shrewd, greedy, charismatic negotiator | **Level 1 Merchant**: Stocks missing Copper Induction Coil, engages in dynamic price bargaining | `negotiate_price`, `sell_item`, `buy_item`, `manage_stock`, `trade` |
+| `priya_wife` | Priya | Companion & Caretaker | Warmhearted, witty, perceptive | **Level 2 Companion**: Provides survival counsel, assists with farm tasks, follows player | `follow_player`, `help`, `trade`, `provide_relief`, `converse` |
+| `ravi_farmer` | Ravi | Veteran Farmer | Stubborn, hardworking, skeptical | **Level 2 Farmer**: Demands canal clearing assistance and fair barter before sharing granary food | `manage_farm`, `collect_resource`, `trade`, `barter_grain` |
+| `vikram_police` | Inspector Vikram | Village Constable | Observant, disciplined, strict | **Level 3 Law Enforcer**: Enforces nighttime curfew, interrogates suspicious travelers, investigates thefts | `patrol`, `enforce_curfew`, `interrogate`, `protect_location` |
+| `kalia_thief` | Kalia | Lock Specialist & Rogue | Elusive, streetwise, opportunistic | **Level 3 Rogue**: Picks locked disaster gates, scouts flooded ruins, fences black market items | `lockpick`, `scavenge`, `hide`, `trade_salvage` |
+| `ramesh_elder` | Ramesh Kaka | Village Elder | Wise, patient, revered diplomat | **Level 4 Council Leader**: Presides over banyan tree panchayat, mediates village-wide supply debates | `preside_council`, `mediate_conflict`, `advise`, `bless` |
+| `suresh_villager` | Suresh | Mason & Laborer | Humble, diligent, helpful | Background resident: clears masonry debris, repairs storm-hit roofs | `collect_resource`, `masonry_repair`, `help` |
+| `maya_villager` | Maya | Artisan Weaver | Cheerful, expressive, optimistic | Background resident: weaves clinic bandages, sparks community conversations | `converse`, `assist`, `deliver_cloth` |
 
 ---
 
 ### NPC profile fields
 
-Every NPC should have a structured profile:
+Every NPC definition is anchored in the `npc_definitions` PostgreSQL database table:
 
 ```ts
 type NPCProfile = {
   id: string;
   name: string;
   role: string;
-  personality: string[];
+  bio: string;
+  personalityTraits: string[];
   speakingStyle: string;
-  goals: string[];
+  systemPrompt: string;
+  coreGoals: string[];
   fears: string[];
-  values: string[];
-  homeLocation: string;
-  currentLocation: string;
-  scheduleId?: string;
-  voiceId?: string;
-  preferredLanguage: string;
-  capabilities: string[];
+  moralValues: string[];
+  voiceProvider: string;
+  voiceId: string;
+  defaultLanguage: string;
+  spriteKey: string;
+  allowedActions: string[];
+  homeZone: string;
+  defaultSchedule: ScheduleEntry[];
+  negotiationProfile: {
+    basePriceModifier?: number;
+    minPriceMultiplier?: number;
+    patienceTurns?: number;
+    greedLevel?: "low" | "medium" | "high";
+    priceFlexibility?: "rigid" | "moderate" | "flexible";
+    dislikedTactics?: string[];
+    favoredArguments?: string[];
+  };
+  startingInventory: {
+    itemId: string;
+    name: string;
+    quantity: number;
+    basePrice?: number;
+    category?: string;
+    isQuestItem?: boolean;
+    description?: string;
+  }[];
 };
 ```
 
 Do not put all behavior into a giant system prompt. Keep identity,
-current state, memories, goals, and action permissions as separate data.
+current state, memories, goals, negotiation boundaries, and action permissions as separate structured data.
 
 ### NPC runtime state
 
 ```ts
 type NPCState = {
+  npcId: string;
+  position: { x: number; y: number };
+  activity: "idle" | "walking" | "talking" | "working" | "following" | "acting";
+  currentGoal?: string;
+  currentTaskId?: string;
+  inventory: Record<string, number>;
+  health?: number;
+  energy?: number;
+  relationshipToPlayer: number;
+  nearbyNpcIds: string[];
+  activeNegotiationSession?: {
+    counterOffer: number;
+    turnsRemaining: number;
+    status: "in_progress" | "agreed" | "rejected";
+  };
+};
+```
   npcId: string;
   position: { x: number; y: number };
   activity: "idle" | "walking" | "talking" | "working" | "following" | "acting";
@@ -743,100 +746,249 @@ game logic.
 
 ## 11. Story and Game Progression
 
-### Chapter 1 --- The Storm
+The overarching narrative is structured as a **Level-Based Story Progression specifically engineered to showcase all game features and technical demos step-by-step**. Rather than abstract exposition, each level serves as an end-to-end playable demonstration of core systems: open-world roaming with physical inventory, voice/text dialogue, dynamic price negotiation, multi-step quest state progression, companion following, day/night stealth, and multi-agent group deliberation.
 
-**Story:** The player arrives in the village after a severe storm.
+---
 
-Objectives: - Explore the village. - Meet the wife and key villagers. -
-Talk to the elder, farmer, doctor, and shopkeeper. - Discover damage to
-homes and infrastructure. - Learn the village's current needs.
+### Level 1 --- The Broken Heart of the Clinic (Core Loop & Negotiation Demo)
 
-Systems demonstrated: - Movement and map exploration. - Individual voice
-conversations. - NPC profiles and memory. - Basic quest tracking.
+**Narrative Context:**
+The village of Kaveripura is reeling from a catastrophic monsoon deluge. Lightning surges knocked out power grids, and low-lying homes were flooded. In the village hospital/clinic, Dr. Meera is overwhelmed with trauma patients. To make matters worse, the clinic's vital life-support machine (the oxygen concentrator and diagnostic centrifuge unit) has suffered electrical burnout and ceased functioning. Without it, critical patients cannot survive.
 
-### Chapter 2 --- The Shortage
+**Primary Demonstrations:**
+1. WASD world navigation, collision detection, and interior transition.
+2. Individual voice-to-voice and text NPC dialogue with Dr. Meera.
+3. Dynamic quest assignment and server-validated item pickup into Player Inventory.
+4. Player Inventory management and carrying items while freely roaming the open world.
+5. Location discovery: finding Arjun's Mechanic Workshop.
+6. **Price Negotiation Demo 1 (Mechanic):** Bargaining over repair service charges with Arjun using real-time dialogue and economic resistance curves.
+7. Machine inspection, state diagnosis, and missing part discovery.
+8. Location discovery: traveling across the central plaza to Dev's General Store.
+9. **Price Negotiation Demo 2 (Shopkeeper):** Bargaining over purchase price of a scarce hardware component with Dev the greedy merchant.
+10. Inventory persistence: purchasing, hauling, and delivering the missing component across the village.
+11. Grounded NPC action execution: Arjun takes the part, runs repair animations and sound effects, and deposits the repaired machine into player inventory.
+12. Quest completion: returning the functioning unit to Dr. Meera, receiving rewards, updating relationship scores, and completing Level 1.
 
-**Story:** The hospital needs food and medical supplies.
+```mermaid
+flowchart TD
+    A["1. Enter Hospital / Clinic<br/>(Talk to Dr. Meera)"] -->|"Machine is broken!<br/>Receive Broken Medical Machine"| B["2. Broken Machine in Inventory<br/>(Roam across village to Workshop)"]
+    B --> C["3. Speak with Arjun (Mechanic)<br/><b>Negotiate Repair Price</b>"]
+    C -->|"Arjun opens chassis & inspects"| D["4. Diagnosis: Part is Missing!<br/>(Copper Induction Coil needed)"]
+    D -->|"Roam to Bazaar"| E["5. Speak with Dev (Shopkeeper)<br/><b>Negotiate Purchase Price</b>"]
+    E -->|"Buy Coil & place in Inventory"| F["6. Roam back to Arjun's Workshop<br/>(Deliver Coil → Arjun repairs machine)"]
+    F -->|"Receive Repaired Medical Machine"| G["7. Roam back to Hospital<br/>(Deliver to Dr. Meera → <b>Level 1 Complete!</b>)"]
+```
 
-Objectives: - Talk to the doctor. - Negotiate with the farmer. -
-Negotiate with the shopkeeper. - Gather or trade the required
-supplies. - Deliver supplies to the hospital.
+#### Detailed Step-by-Step Level 1 Walkthrough
 
-Systems demonstrated: - Inventory and resource collection. - Trading. -
-NPC action execution. - Relationship changes.
+1. **Step 1: Hospital Consultation & Broken Machine Pickup**
+   - **Action:** Player navigates to Dr. Meera's Clinic (x: 720, y: 240) and enters the door interior or talks to Dr. Meera within the 60px interaction radius.
+   - **Dialogue:** Dr. Meera speaks urgently in Hindi/English: *"The storm power surges fried our primary oxygen concentrator! Patients with lung injuries can't breathe without it. Take this broken unit to Arjun's workshop on the eastern rim right now. But beware: Arjun is stubborn and charges for repairs—negotiate hard with him!"*
+   - **System Event:** Server triggers quest `quest_level_1_machine_repair` (Objective 1: `deliver_machine_to_mechanic`).
+   - **Inventory Event:** The `broken_medical_machine` item (weight: 6.5kg, category: `quest`, status: `broken`) is deposited into the player's inventory backpack. A held-item indicator shows on the player HUD.
 
-### Chapter 3 --- The Generator
+2. **Step 2: Roaming with Item in Inventory**
+   - **Action:** Player exits the clinic and walks/sprints across the village path eastward toward the workshop.
+   - **Mechanic:** The player has a physical item in their inventory. Movement speed and animations reflect carrying equipment. The item persists seamlessly across zone transitions.
+   - **System Event:** Player position updates via WebSocket (`player:move`). World collision prevents boundary exploits.
 
-**Story:** Electricity must be restored.
+3. **Step 3: Mechanic Encounter & Price Negotiation (Negotiation Demo 1)**
+   - **Action:** Player arrives at Arjun's Workshop (x: 1560, y: 240) and initiates dialogue.
+   - **Dialogue:** Player explains the clinic emergency and asks Arjun to fix the machine.
+   - **Mechanic Reaction:** Arjun inspects the unit and grunts: *"This is a specialized military-grade capacitor circuit. Normal repair fee is 120 silver rupees. Pay up front or find another mechanic."*
+   - **Negotiation Interaction:** The player enters the Price Negotiation state. The player negotiates verbally or via text:
+     - *Player:* *"Arjun, children in Meera's clinic are suffocating without oxygen! How can you charge 120 rupees during a flood?"*
+     - *Arjun AI Evaluation:* The Dynamic Negotiation Engine processes the player's argument against Arjun's traits (`impatient`, `proud craftsman`, `moderate price flexibility`). Arjun softens: *"Alright, fine! For Dr. Meera and the patients, I'll drop my labor fee to 80 rupees. That's my final offer."*
+     - *Agreement:* Deal is confirmed. 80 rupees/tokens are deducted from the player's wallet.
 
-Objectives: - Find the mechanic. - Learn which components are missing. -
-Collect required resources. - Ask villagers for help. - Repair the
-generator.
+4. **Step 4: Machine Inspection & Missing Part Discovery**
+   - **Action:** Arjun takes his wrench, unbolts the housing, and probes the circuitry.
+   - **Discovery:** Arjun curses: *"Dammit! The central Copper Induction Coil didn't just blow—it melted into slag! I can't wind a new one without high-purity copper wire. I don't have that part in my scrap bin."*
+   - **Instruction:** Arjun directs the player: *"Go to Dev's General Store in the central bazaar. That greedy merchant hoarders imported hardware. Tell him you need a 'Copper Induction Coil'. But watch your wallet—he'll smell your desperation and hike the price. Haggle him down!"*
+   - **System Event:** Objective 1 marked complete. Objective 2 activated: `procure_copper_coil_from_dev`.
 
-Systems demonstrated: - Multi-step tasks. - NPC coordination. -
-Autonomous movement and task execution. - World-state changes.
+5. **Step 5: Bazaar Travel & Shopkeeper Price Negotiation (Negotiation Demo 2)**
+   - **Action:** Player roams across the square to Dev's Store (x: 1120, y: 310) and engages Dev behind the counter.
+   - **Dialogue & Asking Price:** Dev welcomes the player with merchant charm: *"Bhai re bhai! Welcome to Dev's Trading Post! Ah, you need a Copper Induction Coil? Genuine imported brass and copper! Extremely rare after the roads washed out. That will be 95 rupees."*
+   - **Negotiation Interaction:** Player bargains with Dev (demonstrating merchant negotiation against high greed):
+     - *Player:* *"95 rupees? That's daylight robbery! Ramesh Kaka will hear about this price gouging during an emergency!"*
+     - *Dev Counter-Offer:* *"Arey boss, don't bring the elder into business! Supply and demand! But okay, for a neighbor in need, 75 rupees."*
+     - *Player Counter:* *"55 rupees cash in hand right now, and I'll tell Dr. Meera you supported the clinic."*
+     - *Dev Agreement:* *"Deal! You drive a hard bargain, friend. Take it before I change my mind!"*
+   - **Inventory Event:** 55 rupees deducted. `copper_induction_coil` (category: `mechanical`, isQuestItem: `true`) added to player inventory.
+   - **System Event:** Objective 2 complete. Objective 3 activated: `bring_coil_to_arjun`.
 
-### Chapter 4 --- The Conflict
+6. **Step 6: Return to Workshop & Grounded Repair Action**
+   - **Action:** Player roams back to the workshop and delivers the Copper Induction Coil to Arjun.
+   - **Grounded Action:** Arjun triggers action `repair_machine`:
+     - Arjun animates working at his lathe/workbench.
+     - Workshop hammering and electrical soldering audio cues play.
+     - Server consumes `copper_induction_coil` from player inventory.
+     - The machine state is updated from `broken` to `repaired`.
+   - **Inventory Event:** Arjun deposits `repaired_medical_machine` into the player's inventory.
+   - **Dialogue:** Arjun wipes his brow: *"There! Rewired, soldered, and humming like a dream. Now hurry back to the clinic before Meera loses another patient!"*
+   - **System Event:** Objective 3 complete. Objective 4 activated: `deliver_repaired_machine_to_clinic`.
 
-**Story:** Villagers disagree about how to distribute remaining
-supplies.
+7. **Step 7: Return to Hospital & Level 1 Completion**
+   - **Action:** Player roams back across Kaveripura to the clinic and delivers the repaired unit to Dr. Meera.
+   - **Completion Interaction:** Dr. Meera inspects the humming machine, plugs it into the clinic battery, and exclaims with joy: *"The oxygen pressure is restored! You saved lives today. Take these clinic supplies and tokens as our gratitude."*
+   - **Rewards:** +25 Relationship score with Dr. Meera, +5 Village Reputation, 100 XP, 3x Antiseptic Salves.
+   - **System Event:** Quest `quest_level_1_machine_repair` status committed as `COMPLETED`. Level 1 complete banner displays on screen! Level 2 unlocks.
 
-Objectives: - Listen to both sides. - Understand each NPC's
-motivations. - Negotiate a solution. - Ask another NPC to intervene if
-desired. - Make a distribution decision.
+#### Features Demonstrated in Level 1
 
-Systems demonstrated: - Group conversations. - NPC relationships and
-memories. - Social reasoning. - Consequence-based decisions.
+| Feature | Where it is Demonstrated in Level 1 |
+|---|---|
+| **Player Movement & Overworld Navigation** | Walking and sprinting across the village paths between clinic, workshop, and bazaar. |
+| **Interior & Threshold Interaction** | Entering clinic, workshop, and store zones with dynamic talk threshold radius (<= 60px). |
+| **Voice / Text STT & TTS Dialogue** | Speaking with Dr. Meera, Arjun, and Dev in Hindi/English with low-latency synthesis. |
+| **Player Inventory System** | Storing, inspecting, carrying, and roaming with quest items (`broken_medical_machine`, `copper_induction_coil`, `repaired_medical_machine`). |
+| **Dynamic Price Negotiation (Craftsman)** | Haggling with Arjun over repair labor fee; resistance curve based on patience and pride. |
+| **Task Branching & Diagnosis** | Machine disassembly revealing missing spare part required to advance the quest. |
+| **Dynamic Price Negotiation (Merchant)** | Haggling with Dev over scarce component; resistance curve based on merchant greed and market supply. |
+| **Atomic Inventory Transactions** | Server-authoritative deduction of funds and addition/removal of physical item tokens. |
+| **Grounded NPC Action Execution** | Arjun performing real repair animations and audio cues, mutating world/item state. |
+| **Multi-Stage Quest State Machine** | Tracking 4 sequential objectives across multiple NPCs without LLM hallucination. |
+| **Persistent Relationship Progression** | Relationship score with Dr. Meera increases; reputation points recorded in database. |
 
-### Chapter 5 --- The Recovery
+---
 
-**Story:** The village reacts to the player's decisions.
+### Level 2 --- The Granary Crisis & The Farmer's Barter (Farming & Companion Demo)
 
-Objectives: - Observe the recovery. - See which NPCs completed their
-goals. - Discover relationship changes. - Resolve remaining issues. -
-Reach an ending based on player choices.
+**Narrative Context:**
+With the clinic machine operational, food shortages threaten the village. Flood waters have ruined winter crops, and farmer Ravi refuses to open the communal granary without assistance and fair barter. The player must enlist their companion Priya to help.
 
-Systems demonstrated: - Persistent world state. - Long-term NPC
-memory. - Emergent consequences. - Multiple outcomes.
+**Demonstrated Features:**
+- **Companion Following AI:** Priya follows the player, provides guidance, and comments on village dynamics.
+- **Agricultural & Resource Gathering:** Clearing debris from flooded crop canals and harvesting carrots/grain at Ravi's farm.
+- **Multi-Resource Barter:** Negotiating a composite trade (tools + labor for grain crates) instead of direct currency.
+- **Inventory Weight & Encumbrance:** Hauling heavy grain sacks back to the village distribution center.
+- **Emotional Memory:** Ravi recalls whether the player treated him with respect or tried to exploit him.
 
-### Player choice examples
+---
 
-- Convince an NPC.
-- Negotiate a trade.
-- Offer help.
-- Ask another NPC to intervene.
-- Collect resources personally.
-- Delegate a task to an NPC.
-- Choose how supplies are distributed.
+### Level 3 --- Shadows of Kaveripura & The Night Curfew (Day/Night & Stealth Demo)
 
-Keep the story state in explicit quest and world-state data. Do not rely
-on the LLM to remember which chapter or objective is active.
+**Narrative Context:**
+As night falls over Kaveripura, Inspector Vikram enforces a village-wide curfew to prevent looting. However, vital antiseptic medicine is locked inside an abandoned, waterlogged dispensary behind a jammed iron gate. The player must either navigate police checkpoints or strike a deal with Kalia the thief.
+
+**Demonstrated Features:**
+- **Day/Night Cycle & Dynamic Lighting:** Visibility drops, lantern lighting activates, and NPC schedules transition to night routines.
+- **Police Patrol AI & Interrogation:** Inspector Vikram walks patrol paths with vision cones; triggers curfew questioning if caught.
+- **Rogue Mechanics & Lockpicking:** Kalia uses stealth in shadow alleys; offers lockpicking services in exchange for scavenged salvage.
+- **Moral Choice & Consequence:** Choosing between lawful coordination with Vikram or illegal black-market lockpicking with Kalia.
+
+---
+
+### Level 4 --- The Banyan Council Deliberation (Multi-NPC Group Deliberation Demo)
+
+**Narrative Context:**
+A village-wide crisis reaches boiling point: Dev has acquired an emergency fuel shipment, but Dr. Meera needs it for clinic refrigeration, Ravi needs it for irrigation water pumps, and Dev wants to sell it to outside travelers. Ramesh Kaka convenes the village panchayat under the ancient banyan tree.
+
+**Demonstrated Features:**
+- **Proximity-Based NPC-to-NPC Conversations:** Villagers talk among themselves as the player approaches the plaza.
+- **Group Conversation with Turn-Taking:** Ramesh Kaka moderates a formal 4-NPC debate (Meera, Ravi, Dev, Vikram) with structured speech turns.
+- **Player Speech Intervention:** Player speaks into the microphone to propose a compromise; LLM scores persuasiveness across all NPCs.
+- **Democratic Consensus Voting:** NPCs adjust their votes dynamically based on player arguments and relationship scores.
+
+---
+
+### Level 5 --- The Resilient Village (Persistent Simulation & Emergent Endings)
+
+**Narrative Context:**
+The floodwaters recede. The village reflects the cumulative consequences of the player's trade deals, council decisions, and relationship scores.
+
+**Demonstrated Features:**
+- **Mem0 Long-Term Episodic Recall:** NPCs reference specific promises, price negotiations, and debates from earlier levels.
+- **Emergent World States:** Damaged buildings are either rebuilt or deserted based on resource distribution.
+- **Branching Endings:** 
+  - *The Communal Village:* High equality, functioning clinic, thriving farm.
+  - *The Mercantile Outpost:* High wealth for Dev and Arjun, but strained social trust.
+  - *The Fractured Haven:* Unresolved grudges and lingering shortages.
+
+---
+
+### Player Inventory & Roaming Architecture
+
+To support roaming the world with physical items across all levels, the game features a server-authoritative **Player Inventory System**:
+
+```ts
+interface InventoryItem {
+  id: string; // unique instance ID
+  itemDefId: string; // e.g. "broken_medical_machine", "copper_induction_coil"
+  name: string;
+  category: "quest" | "mechanical" | "medical" | "resource" | "tool" | "currency";
+  quantity: number;
+  weight: number; // in kg
+  condition: "broken" | "repaired" | "pristine" | "used";
+  isQuestItem: boolean;
+  iconSrc: string;
+  description: string;
+  customData?: Record<string, unknown>;
+}
+
+interface PlayerInventory {
+  maxSlots: number; // e.g. 16 slots
+  maxWeight: number; // e.g. 40.0 kg
+  activeHeldItemSlot: number | null; // index of item held in player's hands
+  items: (InventoryItem | null)[];
+  tokens: number; // silver rupees/currency
+}
+```
+
+#### Roaming Mechanics
+- **World Persistence:** Items in the backpack persist across exterior village exploration and interior building transitions (hospital, workshop, store).
+- **Visual Held-Item Indicator:** When carrying major quest items like the `broken_medical_machine` or `repaired_medical_machine`, the player sprite renders a visible carrying overlay or HUD item badge.
+- **Movement Speed Integration:** Heavy quest loads apply realistic weight physics, slightly reducing sprint speed while roaming.
+- **Atomic Server Validation:** Trades, item drops, and repairs run inside PostgreSQL transactions (`db.transaction`) to prevent inventory desynchronization or duplication.
+
+---
+
+### Dynamic Price Negotiation Engine
+
+Price bargaining with NPCs like Arjun (repair fees) and Dev (item sales) is powered by a specialized **Dynamic Price Negotiation Engine**:
+
+```mermaid
+flowchart LR
+    A["Player Spoken/Text Offer"] --> B["LLM Argument & Tone Evaluator"]
+    B --> C["NPC Personality Filter<br/>(Patience, Greed, Flexibility)"]
+    C --> D{"Within Bounds?<br/>(Floor ≤ Price ≤ Ceiling)"}
+    D -->|Yes| E["NPC Proposes Counter-Offer or Accepts Deal"]
+    D -->|No (Offensive / Ridiculous)| F["NPC Refuses / Loses Patience"]
+    E --> G["Player Confirms → Atomic Wallet Deduction"]
+```
+
+#### Negotiation Parameters
+- **Base Asking Price ($P_{\text{base}}$):** The initial price quoted by the NPC (e.g. 120 tokens for Arjun, 95 tokens for Dev).
+- **Minimum Walk-Away Floor ($P_{\text{min}}$):** The absolute lowest price the NPC will accept regardless of persuasion ($P_{\text{base}} \times \text{minPriceMultiplier}$, e.g. 75 tokens for Arjun, 50 tokens for Dev).
+- **Patience Counter ($N_{\text{patience}}$):** Number of negotiation rounds before the NPC grows exasperated and locks the current price.
+- **Persuasion Factor:** Evaluates player arguments (urgent medical necessity, community goodwill, future barter promises, flattery).
+- **Character Modifiers:**
+  - *Dev (Shopkeeper):* High greed, loves banter, starts with +50% markup, gradually drops with charismatic haggling.
+  - *Arjun (Mechanic):* Moderate greed, high pride, dislikes being called greedy, respects craftsmanship and emergency medical duty.
 
 ---
 
 ## 12. Database Design
 
-Initial PostgreSQL tables:
+### Initial PostgreSQL Tables
 
-Table Purpose
-
----
-
-`users` Player account, if accounts are required
-`game_sessions` Save slots and active sessions
-`world_states` Current village-level state
-`npcs` NPC identity, profile, role, and configuration
-`npc_states` Current position, activity, inventory, and goal
-`npc_memories` Episodic and semantic memory
-`npc_relationships` Relationship dimensions between entities
-`conversations` Conversation session metadata
-`conversation_messages` Dialogue turns and speaker IDs
-`npc_tasks` Assigned and autonomous tasks
-`npc_actions` Action queue, status, and result
-`inventories` Entity inventories
-`world_events` Important committed events
-`quests` Quest definitions and progress
-`quest_objectives` Objective completion state
+| Table | Purpose | Core Columns |
+|---|---|---|
+| `npc_definitions` | Master template containing immutable NPC traits, prompts, allowed actions, goals, and voices | `id`, `name`, `role`, `bio`, `personality_traits`, `speaking_style`, `system_prompt`, `core_goals`, `fears`, `moral_values`, `voice_provider`, `voice_id`, `default_language`, `sprite_key`, `allowed_actions`, `home_zone`, `default_schedule`, `negotiation_profile`, `starting_inventory` |
+| `users` | Player accounts (NextAuth / email / credentials) | `id`, `email`, `name`, `created_at` |
+| `game_sessions` | Active save slots and player session states | `id`, `user_id`, `current_level`, `village_reputation`, `playtime_seconds` |
+| `world_states` | Village-level dynamic state and infrastructure health | `session_id`, `clinic_machine_status`, `generator_status`, `bridge_status`, `granary_level` |
+| `npc_states` | Runtime position, activity, current goal, and coordinates | `session_id`, `npc_id`, `x`, `y`, `activity`, `current_zone`, `state` |
+| `inventories` | Player and NPC inventory bags and coin balances | `id`, `session_id`, `owner_type` (player/npc), `owner_id`, `tokens_balance`, `max_weight`, `max_slots` |
+| `inventory_items` | Specific item instances currently in inventories | `id`, `inventory_id`, `item_def_id`, `quantity`, `condition`, `is_quest_item`, `custom_data` |
+| `items` | Master item definitions catalog | `id`, `name`, `category`, `weight`, `base_value`, `icon_key`, `description` |
+| `quests` | Active and completed storyline quests | `id`, `session_id`, `quest_def_id`, `level_number`, `status` (active/completed), `created_at` |
+| `quest_objectives` | Fine-grained objective tracking for quests | `id`, `quest_id`, `objective_key`, `order_index`, `status` (pending/completed), `completed_at` |
+| `negotiation_sessions`| Active price bargaining sessions with NPCs | `id`, `session_id`, `npc_id`, `transaction_type` (service/purchase), `base_price`, `agreed_price`, `turns_taken`, `status` |
+| `npc_memories` | Semantic and episodic memory entries (Mem0 + pgvector) | `id`, `npc_id`, `session_id`, `memory_type`, `content`, `embedding`, `emotional_valence` |
+| `npc_relationships`| Multi-dimensional affinity scores between player & NPCs | `session_id`, `npc_id`, `trust_score`, `respect_score`, `friendship_score` |
+| `world_events` | Immutable log of committed major story milestones | `id`, `session_id`, `event_type`, `payload`, `timestamp` |
 
 ### Data ownership
 
@@ -1137,24 +1289,27 @@ economically.
 **Deliverable:** Two or more NPCs can talk and coordinate when the
 player is nearby, without constant LLM calls.
 
-### Phase 6 --- Story, polish, and demo
+### Phase 6 --- Story, Polish, and Feature Demonstration
 
-**Goal:** Deliver a coherent experience rather than a collection of
-disconnected features.
+**Goal:** Deliver a cohesive Level-Based playable experience that demonstrates every core system.
 
-- [ ] Implement chapter and objective state machines.
-- [ ] Complete Chapter 1.
-- [ ] Complete a polished Chapter 2 slice.
-- [ ] Add the generator repair task from Chapter 3 if time permits.
-- [ ] Add the Chapter 4 supply conflict as a group-conversation demo.
-- [ ] Add consequence summary for Chapter 5.
+- [ ] Implement Level 1 objective state machine:
+  1. Hospital consultation & `broken_medical_machine` inventory pickup.
+  2. Roaming across Kaveripura to workshop with item in bag.
+  3. Interactive price negotiation with Arjun the mechanic.
+  4. Machine disassembly & `copper_induction_coil` missing part discovery.
+  5. Roaming to bazaar & interactive price negotiation with Dev the shopkeeper.
+  6. Return to workshop with coil; Arjun executes grounded repair; deposits `repaired_medical_machine`.
+  7. Return to clinic & deliver working machine to Dr. Meera (Level 1 Complete).
+- [ ] Implement Player Inventory UI modal and active HUD item holder.
+- [ ] Implement Dynamic Price Negotiation UI and state engine for service fees and items.
+- [ ] Implement Level 2 slice: Companion following with Priya, canal clearing, and granary barter with Ravi.
 - [ ] Add sound effects, UI feedback, and transitions.
-- [ ] Add save/load.
-- [ ] Test failure cases and provider outages.
-- [ ] Prepare a repeatable demo script.
+- [ ] Add save/load for world, inventory, and quest state.
+- [ ] Test failure cases, network timeouts, and fallback modes.
+- [ ] Prepare a repeatable 7-step Level 1 live demo script.
 
-**Deliverable:** A polished vertical slice demonstrating exploration,
-voice, memory, autonomy, collaboration, and consequences.
+**Deliverable:** A polished, end-to-end playable Level 1 vertical slice demonstrating world roaming with inventory, voice interaction, two-stage dynamic price negotiations, grounded repair actions, and quest progression.
 
 ---
 
@@ -1165,56 +1320,23 @@ must pass observable end-to-end tests.
 
 ---
 
-Feature Acceptance test
-
----
-
-Movement Player moves in four directions and
-cannot pass through blocked tiles
-
-Camera Camera follows player smoothly and
-respects map bounds
-
-Interaction NPC interaction begins only within
-the configured range
-
-Voice STT A spoken test phrase produces a
-usable transcript in a verified
-supported language
-
-NPC dialogue Different NPCs respond with visibly
-distinct personalities
-
-TTS NPC response is played as audio;
-text remains available
-
-Memory An NPC can correctly recall a
-previously committed important
-event
-
-Follow NPC navigates toward and follows
-the player
-
-Collection NPC reaches a resource node and
-inventory changes exactly once
-
-Trade Trade validates ownership and
-atomically updates both inventories
-
-Group dialogue Two NPCs exchange a bounded
-conversation when eligible and
-nearby
-
-Relationships A committed player action changes
-the relevant relationship dimension
-
-Fallback Text interaction still works if
-STT/TTS is unavailable
-
-Persistence Reloading a save restores the
-committed world and quest state
-
----
+| Feature | Acceptance Test |
+|---|---|
+| **Movement & Boundaries** | Player moves in 4 directions, sprints with Shift, and cannot pass through blocked map tiles. |
+| **Camera & Bounds** | Camera follows player smoothly and respects map bounds without tearing or shaking. |
+| **Interaction Threshold** | NPC dialogue interaction begins only within the configured radius (<= 60px). |
+| **Voice STT** | Spoken player audio produces accurate transcript in Hindi or English using Gnani STT. |
+| **NPC Dialogue** | NPCs respond in character using bounded personality traits, core goals, and speaking style without plot hallucinations. |
+| **Voice TTS** | NPC reply plays as natural voice audio using Gnani Timbre v2.5; text remains readable on HUD. |
+| **Player Inventory System** | Player receives items into backpack, carries them while roaming across the village, and items persist across interior door transitions. |
+| **Price Negotiation (Mechanic)** | Player negotiates repair service fee with Arjun; price dynamically adjusts within bounded min/max multiplier based on persuasion. |
+| **Missing Part Quest Step** | Arjun examines machine, triggers missing part objective, and directs player to Dev. |
+| **Price Negotiation (Merchant)** | Player bargains with Dev for the Copper Induction Coil; agreed transaction atomically deducts tokens and adds item. |
+| **Grounded NPC Action Execution** | Arjun executes `repair_machine`, consumes the coil, plays workshop audio, and delivers `repaired_medical_machine`. |
+| **Level 1 Completion** | Player hands repaired machine to Dr. Meera at clinic; quest completes, relationship score increases, and Level 1 banner renders. |
+| **Follow / Companion** | Companion NPC navigates toward and follows player through the world. |
+| **Fallback Mode** | Text interaction and UI fallback remain completely functional if microphone, STT, or TTS fails. |
+| **Persistence** | Reloading session restores world state, inventory items, and quest objective progress. |
 
 ---
 
@@ -1319,25 +1441,37 @@ pipeline.
 
 ## 21. Demo Script
 
-A reliable 3--5 minute demo should prove the core idea without depending
-on unpredictable emergent behavior.
+A reliable 4--6 minute live demonstration that proves the core grounded simulation loop and showcases all Level 1 features end-to-end:
 
-1.  **Explore:** Move through the village and approach Ravi the farmer.
-2.  **Speak:** Ask Ravi in a supported Indian language whether he can
-    provide food for the hospital.
-3.  **Negotiate:** Ravi responds according to his stubborn personality
-    and proposes a trade.
-4.  **Act:** Ask Ravi to collect food. Show him navigating to the farm
-    and collecting it.
-5.  **Collaborate:** Walk near two villagers and trigger a short
-    conversation about the shortage.
-6.  **Remember:** Return to Ravi and ask about the earlier agreement. He
-    recalls it.
-7.  **Consequence:** Deliver food to the hospital and show the
-    quest/world state updating.
+1. **Explore & Enter Clinic:**
+   - Move through Kaveripura using WASD into Dr. Meera's Health Clinic.
+   - Approach Dr. Meera (within the 60px proximity radius).
+2. **Consultation & Broken Machine Pickup (Step 1):**
+   - Speak via push-to-talk microphone (or text) to Dr. Meera.
+   - Dr. Meera urgently explains the power surge burnout of the oxygen concentrator.
+   - Player accepts quest; `broken_medical_machine` is placed into the Player Inventory.
+3. **Roaming the World with Inventory (Step 2):**
+   - Player leaves the clinic with the broken machine held in their inventory.
+   - Roams across the village paths to the eastern rim to Arjun's Mechanic Workshop.
+4. **Service Price Negotiation with Mechanic (Step 3):**
+   - Approach Arjun at his workbench and request repair.
+   - Arjun quotes 120 rupees; player negotiates down using voice ("Patients in the clinic need oxygen!").
+   - Dynamic negotiation engine accepts counter-offer of 80 rupees; wallet deducts funds.
+5. **Machine Disassembly & Missing Part Discovery (Step 4):**
+   - Arjun unbolts the casing and diagnoses the fault: the central Copper Induction Coil has melted.
+   - Arjun tasks player to buy a replacement coil from Dev's store in the bazaar.
+6. **Merchant Price Negotiation at the Bazaar (Step 5):**
+   - Player roams to the central plaza store and approaches Dev the shopkeeper.
+   - Dev asks for an exorbitant 95 rupees; player negotiates aggressively down to 55 rupees.
+   - Dev transfers `copper_induction_coil` into player inventory.
+7. **Grounded Repair Action Execution (Step 6):**
+   - Player carries the coil back to Arjun's workshop.
+   - Arjun consumes the coil, plays workshop repair animations and sounds, and awards `repaired_medical_machine` into the player's inventory.
+8. **Clinic Delivery & Level 1 Complete (Step 7):**
+   - Player carries the repaired machine back to the hospital and delivers it to Dr. Meera.
+   - Dr. Meera tests the machine, confirms oxygen restoration, awards reputation points, and triggers the **Level 1 Complete** victory banner.
 
-Prepare a deterministic fallback path in case an external API is
-unavailable during the live demo.
+Prepare a deterministic fallback path (mock STT/TTS and predefined dialogue steps) in case an external speech API experiences network latency during live demonstration.
 
 ---
 

@@ -31,6 +31,8 @@ export async function seedNPCDefinitions() {
           allowed_actions: npc.allowed_actions,
           home_zone: npc.home_zone,
           default_schedule: npc.default_schedule,
+          negotiation_profile: npc.negotiation_profile,
+          starting_inventory: npc.starting_inventory,
         },
       });
 

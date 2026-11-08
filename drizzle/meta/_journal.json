@@ -8,6 +8,13 @@
       "when": 1794070862948,
       "tag": "0000_acoustic_ego",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794129364831,
+      "tag": "0001_gorgeous_masque",
+      "breakpoints": true
     }
   ]
 }

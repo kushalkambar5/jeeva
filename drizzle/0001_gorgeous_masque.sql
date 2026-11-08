@@ -1,0 +1,2 @@
+ALTER TABLE "npc_definitions" ADD COLUMN "negotiation_profile" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "npc_definitions" ADD COLUMN "starting_inventory" jsonb DEFAULT '[]'::jsonb NOT NULL;
