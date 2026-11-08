@@ -24,7 +24,7 @@
 
 ## Overview
 
-In traditional role-playing games, non-player characters (NPCs) are static cardboard figures locked into rigid dialogue trees. When a character claims they will repair a generator or deliver emergency rations, they remain stationary forever. Furthermore, voice gaming experiences have historically catered solely to Western languages, stumbling when faced with the authentic cadence of Indian speech, localized dialects, and code-mixed phrasing.
+In traditional role-playing games, non-player characters (NPCs) are static cardboard figures locked into scripted dialogue trees. When a character claims they will repair a clinic generator or deliver emergency rations, they remain stationary forever. Furthermore, voice gaming experiences have historically catered solely to Western languages, stumbling when faced with the authentic cadence of Indian speech, localized dialects, and code-mixed phrasing.
 
 **Jeeva** redefines the NPC paradigm by pairing **Gnani.ai's sovereign Indian-language speech and reasoning stack** with a 2D top-down simulation built on Phaser and Next.js. Set in the post-monsoon village of **Kaveripura**, players converse naturally with villagers in **Hindi, Tamil, Telugu, Kannada, Marathi, or Hinglish**. Villagers possess distinct moral values, living memory, and the power of **grounded autonomy**: dialogue commitments are verified by the game server and visibly executed in the game world before your eyes.
 
@@ -33,112 +33,231 @@ In traditional role-playing games, non-player characters (NPCs) are static cardb
 
 ---
 
-## Built on Gnani.ai Sovereign AI Stack
+## Technical Architecture
 
-Jeeva directly integrates the core pillars of Gnani.ai's sovereign stack to deliver low-latency, real-time voice interactions:
+The following diagram illustrates the end-to-end data flow across audio recording, speech processing, cognitive memory retrieval, LLM reasoning, world state validation, and audio synthesis:
 
-| Component | Gnani.ai Model / Engine | Implementation in Jeeva |
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Player
+    participant Client as Web Browser (React + Phaser)
+    participant Rec as WavRecorder (Web Audio API)
+    participant API as Next.js API (/api/npc/talk)
+    participant STT as Gnani Prisma v3.0 STT
+    participant Mem as Mem0 Engine (PostgreSQL)
+    participant LLM as LLM Engine (Evon v3.3 / Groq)
+    participant World as Server World & Inventory Validator
+    participant TTS as Gnani Timbre v2.5 TTS
+
+    Player->>Client: Press & hold [E] within 60px of NPC
+    Client->>Rec: Capture 16kHz linear PCM audio
+    Player->>Rec: Speak in Indic dialect (e.g. Hindi / Hinglish)
+    Player->>Client: Release [E]
+    Client->>API: POST /api/npc/talk (audio/wav blob + playerDistance + wallet)
+
+    Note over API: Strict 60px threshold & trait bounds check
+    API->>STT: Stream 16kHz WAV buffer (indic-auto)
+    STT-->>API: Transcribed text + detected BCP-47 locale
+    API->>Mem: Query Working, Episodic, Relational & Semantic memory
+    Mem-->>API: 4-Tier cognitive context + relationship scores
+
+    API->>LLM: Prompt (Traits + Memory + Wares Catalog + Dialogue)
+    LLM-->>API: Natural dialogue text + [TOOL: action] + [LANG: code]
+
+    alt Tool Call Detected (e.g. trade_deal or follow_player)
+        API->>World: Validate wallet balance, item stock & proximity
+        World-->>API: Action approved & world mutations queued
+    end
+
+    par Parallel TTS Synthesis & Background Memory
+        API->>TTS: Synthesize reply audio (Timbre v2.5, assigned voice)
+        TTS-->>API: 16kHz linear PCM WAV buffer
+    and Asynchronous Memory Lifecycle
+        API-)Mem: Commit working turns, delta relationship, extract facts
+    end
+
+    API-->>Client: JSON {replyText, audioBase64, toolCall, language}
+    Client->>Client: Play Timbre voice audio + render subtitles HUD
+    opt World Action
+        Client->>Client: Spawn floating dropped items / NPC pathfinds to target
+    end
+```
+
+---
+
+## How Does the Game Work?
+
+Jeeva runs as a modern hybrid application combining a server-authoritative Next.js 16 backend with a high-performance 2D canvas client managed by Phaser.
+
+### 1. Engine & Canvas Lifecycle
+* **Client-Side Hydration**: The game canvas is loaded dynamically using Next.js `dynamic(..., { ssr: false })` via `GameTestingCanvas.tsx` and `PhaserGame.tsx`. This avoids SSR DOM mismatches and gives Phaser direct control of WebGL / Canvas2D rendering.
+* **Scene Architecture**:
+  * `VillageScene`: Orchestrates the outdoor open world—terrace farms, riverbanks, village square, clinic exterior, workshop yard, and paths.
+  * `InteriorScene`: Loads dedicated interior floorplans (Hospital Triage Clinic, Arjun's Workshop, Dev's Kirana Store, Player Homestead) upon entering doorways with door transitions and positional restore points.
+* **Physics & Movement**: Utilizes Phaser Arcade Physics. The player entity moves via `WASD` or Arrow keys with 4-directional sprite sheet animations (`walkDown`, `walkLeft`, `walkRight`, `walkUp`). Sprints apply a 1.7x velocity multiplier (130 px/s to 220 px/s).
+
+### 2. Proximity-Bounded Spatial Interaction
+Interaction is strictly space-aware:
+* When the player approaches an NPC within **60 pixels** (`TALK_THRESHOLD_RADIUS`), an interactive prompt activates.
+* **Server Verification**: The backend `/api/npc/talk` endpoint independently calculates and validates `playerDistance <= 60`. Requests submitted beyond this perimeter are rejected with `HTTP 403 OUT_OF_RANGE`.
+
+### 3. Circadian Schedules & World Simulation
+* The game operates on a continuous 24-hour cycle tracked in minutes (`gameTimeMinutes`, 0 to 1439).
+* Ambient lighting tints dynamically across dawn, midday, golden dusk, and night.
+* Every villager follows an immutable routine defined in `npc_definitions`:
+  * **06:00**: Morning chores and house departure.
+  * **08:30**: Opening storefronts, workshop benches, or irrigation canals.
+  * **13:00**: Midday clinic triage or village square rest.
+  * **21:00**: Night curfew; doors lock and Inspector Vikram begins his patrol.
+
+### 4. 15-Slot Grid Inventory & Physical Item Drops
+* **Grid Architecture**: The player manages a 15-slot grid inventory (`MinecraftInventoryModal.tsx`), supporting stack counts, weights, item rarities, and descriptions.
+* **World Drops**: Items are physical world entities (`LiveDroppedItem`) rendered in Phaser with sinusoidal bobbing animations, particle glows, and magnetic pickup triggers when the player walks nearby.
+
+---
+
+## How Does the Agentic System Work?
+
+The core differentiator in Jeeva is **grounded autonomy**. NPCs do not merely produce conversational text; their cognitive outputs translate into concrete, server-authoritative world changes.
+
+```
++------------------------------------------------------------------------------+
+|                           Agentic Decision Loop                              |
++------------------------------------------------------------------------------+
+|                                                                              |
+|  1. Cognitive Ingestion                                                      |
+|     - Player spoken intent via Gnani Prisma STT                              |
+|     - NPC core traits, fears & moral values (from npc_definitions)           |
+|     - Active relationship vector (Trust, Affection, Respect)                 |
+|     - Economic state (Player wallet ₹, merchant catalog, stock count)        |
+|                                                                              |
+|  2. Reasoning & Tool Invocation (Evon v3.3 / Groq Flagship LLM)              |
+|     - Roleplays authentic persona in requested Indic language                |
+|     - Dynamically decides whether to assist, barter, counter-offer, or reject|
+|     - Emits structured tool tags in response payload:                        |
+|       * [TOOL: trade_deal, item: copper_coil, price: 60, quantity: 2]        |
+|       * [TOOL: follow_player]                                                |
+|       * [TOOL: stop_following]                                               |
+|       * [TOOL: go_home]                                                      |
+|                                                                              |
+|  3. Server Validation & Grounded Execution                                   |
+|     - detectToolAndClean() strips tool syntax from spoken dialogue           |
+|     - Backend validates player wallet balance: wallet >= total_agreed_price  |
+|     - Validates item availability in VILLAGE_ITEMS_CATALOG                   |
+|     - Client executes physical action:                                       |
+|       * Deducts wallet rupees                                                |
+|       * Drops physical 2D items on counter/ground for player pickup          |
+|       * Switches NPC state machine to 'following' pathfinder                 |
+|                                                                              |
++------------------------------------------------------------------------------+
+```
+
+### Supported Agentic Tools
+
+| Tool Tag | Trigger Condition | Execution & World Effect |
 | :--- | :--- | :--- |
-| **Speech-to-Text (STT)** | **Prisma v3.0 / v2.5** | Real-time streaming transcription (<200ms latency) handling 10+ Indic languages and code-mixed dialects (Hinglish, Tanglish) from browser 16kHz linear PCM audio streams. |
-| **Text-to-Speech (TTS)** | **Timbre v2.5** | Context-aware prosodic voice synthesis with authentic pronunciation of Indian names, rupee amounts, and lakh/crore numerical cadences over high-speed WAV buffers. |
-| **Reasoning & Actions** | **Evon v3.3 / Sovereign LLM** | 30B MoE Indian foundational model evaluating character morality, relationship vectors, inventory needs, and outputting server-validated structured tool actions. |
+| `trade_deal` | Player agrees on price and quantity for goods | Server checks wallet balance, deducts money, and spawns physical items on the Phaser game floor for collection. |
+| `follow_player` | Player requests assistance or escort (*"Mere saath chalo"*) | NPC switches state to `'following'`, dynamically pathfinding behind the player across the village. |
+| `stop_following`| Player tells companion to wait (*"Yahan ruko"*) | NPC halts pathfinding, locks position, and resumes idle awareness. |
+| `go_home` | Player dismisses NPC (*"Ghar jao"*) | NPC leaves current location and pathfinds back to their schedule anchor coordinate. |
+| `open_trade` | Player asks to browse goods | Triggers trading modal UI displaying available catalog stock. |
+
+### Dynamic Price Negotiation Engine
+Bargaining with merchants (Dev) or mechanics (Arjun) is governed by mathematical psychological constraints defined in `negotiation_profile`:
+* **Greed Multiplier & Markup**: Starting prices include a 15–30% markup above base price.
+* **Patience Counter**: Vendors tolerate 3 to 5 counter-offers before becoming firm or terminating talks.
+* **Relationship Modifier**: High trust and affection scores decrease minimum price thresholds, allowing discounts of up to 40%.
+* **Emotional Leverage**: Mentioning urgent clinic needs or agricultural emergencies unlocks crisis pricing.
+
+---
+
+## How Does the Memory Layer Work?
+
+Jeeva implements a custom **4-Tier Cognitive Memory Engine** powered by Mem0 principles and PostgreSQL:
 
 ```
-                       +---------------------------------------+
-                       |           Player Microphone           |
-                       +---------------------------------------+
-                                           |  (16kHz Linear PCM Audio)
-                                           v
-+-------------------------------------------------------------------------------------+
-|                              Next.js Backend Services                               |
-|                                                                                     |
-|   +--------------------------+                 +--------------------------------+   |
-|   |  Gnani.ai Prisma STT     |  Transcribed    |  AI Language Identifier        |   |
-|   |  - Audio decoding        | --------------> |  - Script & vocabulary check   |   |
-|   |  - Indic speech model    |    Dialogue     |  - BCP-47 locale normalization |   |
-|   +--------------------------+                 +--------------------------------+   |
-|                                                                 |                   |
-|                                                                 v                   |
-|   +-----------------------------------------------------------------------------+   |
-|   |                       Cognitive Context Assembly (Mem0)                     |   |
-|   |   - Working Memory (Session turns)    - Relational Vectors (Trust/Affection)|   |
-|   |   - Episodic Memory (Past deeds)      - Semantic Lore (Kaveripura status)   |   |
-|   +-----------------------------------------------------------------------------+   |
-|                                           |                                         |
-|                                           v                                         |
-|   +-----------------------------------------------------------------------------+   |
-|   |                    Evon v3.3 Reasoning & Decision Engine                    |   |
-|   |   - NPC persona alignment             - Dynamic negotiation evaluation      |   |
-|   |   - Dialogue text generation          - Grounded physical action trigger    |   |
-|   +-----------------------------------------------------------------------------+   |
-|                    |                                             |                  |
-|                    v                                             v                  |
-|   +----------------------------------+         +--------------------------------+   |
-|   |  Gnani.ai Timbre v2.5 TTS        |         |  Server-Authoritative Action   |   |
-|   |  - Multi-voice synthesis         |         |  - Inventory exchange          |   |
-|   |  - Deepak / Nalini / Kaveri      |         |  - Phaser waypoint pathfinding |   |
-|   |  - Linear PCM 16kHz WAV stream   |         |  - Machine state mutation      |   |
-|   +----------------------------------+         +--------------------------------+   |
-+-------------------------------------------------------------------------------------+
-                     |                                             |
-                     v                                             v
-+-------------------------------------------------------------------------------------+
-|                                Phaser 2D Game World                                 |
-|         [Spoken Voice Audio] + [Subtitles HUD] + [Physical NPC Movement/Repair]     |
-+-------------------------------------------------------------------------------------+
++-----------------------------------------------------------------------------+
+|                          4-Tier Cognitive Memory                            |
++-----------------------------------------------------------------------------+
+|                                                                             |
+|  [Tier 1: Working Memory]                                                   |
+|  Table: npc_working_memories                                                |
+|  Sliding window of recent dialogue turns (last 6 turns, chronological)      |
+|  Maintains conversational cohesion and references to current subjects.      |
+|                                                                             |
+|  [Tier 2: Relational Memory]                                                |
+|  Table: npc_relationships                                                   |
+|  5-Dimensional vector: Trust, Affection, Respect, Fear, Familiarity        |
+|  Maps dynamically to categorical social tiers:                             |
+|  hostile_outcast <-> distrusted <-> acquaintance <-> trusted_friend         |
+|                                                                             |
+|  [Tier 3: Episodic Memory]                                                  |
+|  Table: npc_memories (memory_type = 'episodic')                             |
+|  768-dimensional dense vector embeddings of past events & promises.         |
+|  Example: "Sold 2x Kerosene Canisters to player for ₹60 after bargaining."  |
+|                                                                             |
+|  [Tier 4: Semantic Memory]                                                  |
+|  Table: npc_memories (memory_type = 'semantic')                             |
+|  768-dimensional dense vector embeddings of world lore and village facts.   |
+|  Example: "Hospital backup generator was damaged in the monsoon storm."     |
+|                                                                             |
++-----------------------------------------------------------------------------+
 ```
+
+### Hybrid Vector Retrieval Formula
+When a player speaks, the input text is vectorized into a 768-dimensional embedding. Candidates are scored using a weighted hybrid ranking algorithm combining vector similarity, subjective importance, and temporal recency:
+
+$$\text{Hybrid Score} = 0.6 \times \max(0, \text{Cosine Similarity}) + 0.2 \times \left(\frac{\text{Importance}}{10}\right) + 0.2 \times \max\left(0, 1 - \frac{\text{Age Hours}}{168}\right)$$
+
+* **Cosine Similarity (60% weight)**: Measures semantic relevance to the current turn.
+* **Importance (20% weight)**: Prioritizes critical quest events over trivial small talk.
+* **Recency (20% weight)**: Gradually decays memories over a 7-day half-life curve.
+
+The engine selects the top 3 episodic memories and top 3 semantic facts to inject directly into the LLM system prompt.
+
+### Asynchronous Post-Turn Distillation
+Dialogue memory extraction runs asynchronously in the background via `processDialogueMem0Lifecycle`:
+1. Appends current user and assistant turns to working memory.
+2. Updates relationship metrics based on actions taken (e.g., successful trade yields `+6 Trust`, `+4 Affection`, `+3 Respect`).
+3. Dispatches a zero-latency background worker (`extractAndCommitDialogueMemories`) that evaluates if the dialogue revealed durable personal facts, commitments, or emotional changes, vectorizing and committing them into PostgreSQL without blocking client responses.
+
+---
+
+## Models, APIs & Technology Breakdown
+
+An exhaustive breakdown of all models, APIs, and frameworks utilized across Jeeva:
+
+| Subsystem | Model / Technology | Provider / Host | Specific Purpose in Jeeva |
+| :--- | :--- | :--- | :--- |
+| **Speech-to-Text (STT)** | **Prisma v3.0 / v2.5** | **Gnani.ai** (`https://api.vachana.ai/stt/v3`) | Streams 16kHz linear PCM audio directly from browser; provides sub-200ms transcription across 10+ Indic languages and code-mixed speech with auto language detection. |
+| **Text-to-Speech (TTS / PTS)** | **Timbre v2.5** | **Gnani.ai** (`https://api.vachana.ai/api/v1/tts/inference`) | Synthesizes character dialogue audio in linear PCM WAV format; features context-aware prosody, authentic pronunciation of Indian names, rupee amounts, and numerical cadences. |
+| **Flagship Reasoning LLM** | **Evon v3.3** (30B MoE) / **GPT-OSS-120B** | **Gnani.ai** / **Groq LPUs** | Primary cognitive reasoning engine; handles character roleplay, dynamic language mirroring, psychological negotiation math, and structured tool emissions (`trade_deal`, `follow_player`). |
+| **Fallback Dialogue LLM** | **Gemini 1.5 Flash** | **Google Cloud** | Secondary fallback LLM ensuring 100% uptime if primary inference clusters experience rate limiting. |
+| **Language Classifier** | **Heuristic Script Engine + Groq Micro-LLM** | **Internal + Groq** | Evaluates Indic Unicode scripts in <1ms; resolves ambiguous romanized code-mixing (e.g. Hinglish vs. Tanglish) in <10 tokens. |
+| **Vector Embeddings** | **text-embedding-004** (768-dim) / Local Semantic Hashing | **Google Cloud / Internal Vectorizer** | Vectorizes dialogue queries, episodic events, and world lore into 768-dimensional normalized dense vectors for cosine similarity search. |
+| **Audio Capture Client** | **WavRecorder (Web Audio API)** | **Browser Client** | Records raw microphone audio into 16,000 Hz, 1-channel, 16-bit linear PCM WAV blobs. |
+| **Cognitive Framework** | **Mem0 Memory Engine** | **Custom PostgreSQL Engine** | Manages working memory sliding windows, 5-dimensional relationship vectors, and episodic memory persistence. |
+| **Database & ORM** | **PostgreSQL + Drizzle ORM** | **PostgreSQL (Local / Neon)** | Stores user profiles, NPC definitions, memory records, relationships, and inventory item catalogs. |
+| **Fullstack Framework** | **Next.js 16.4.5 + React 19** | **Vercel / Node.js runtime** | App Router, Server Actions, API routes, Turbopack bundling, and responsive frontend UI. |
+| **Game Simulation** | **Phaser 4.2 / Phaser 3** | **Canvas2D / WebGL** | 2D tilemaps, Arcade Physics, character sprite animations, building transitions, and world item drops. |
 
 ---
 
 ## Challenge Awards Alignment
 
-Jeeva was purposefully designed to address the evaluation criteria of the **Great Indian AI Internship Challenge**:
+Jeeva was purposefully engineered to address the evaluation benchmarks of the **[Great Indian AI Internship Challenge](https://www.gnani.ai/internship)**:
 
 * **Main Character Award (Regional Indic Voice)**:
-  First-class native support for regional languages including Kannada (ಕನ್ನಡ), Tamil (தமிழ்), Telugu (తెలుగు), Hindi (हिन्दी), and Marathi (मराठी). Each NPC carries a localized cultural background and dialect.
+  First-class native voice support for regional languages including Kannada (ಕನ್ನಡ), Tamil (தமிழ்), Telugu (తెలుగు), Hindi (हिन्दी), and Marathi (मराठी). Each NPC carries an authentic regional voice persona (`Kaveri`, `Deepak`, `Nalini`) and localized cultural idioms.
 * **Mixed Vibes Award (Code-Mixed Speech)**:
-  Real-world conversational support for Hinglish and Tanglish. Players can blend English technical vocabulary with Indic vernacular (*"Arjun bhai, clinic ka generator dead hai, copper coil lagao"*), and the system handles the intent accurately.
+  Seamless conversational handling of code-mixed Hinglish and Tanglish. Players naturally blend English technical vocabulary with Indic vernacular (*"Arjun bhai, clinic ka generator dead hai, naya copper coil lagao"*), and the system transcribes, comprehends, and responds in kind.
 * **Real Deal Award (Practical Real-World Problem Solving)**:
-  Simulates genuine rural Indian scenarios—managing primary healthcare center (PHC) emergencies during disaster recovery, bargaining with local kirana merchants, and resolving agricultural water distribution disputes.
+  Simulates genuine rural Indian scenarios—managing primary healthcare center (PHC) emergencies during disaster recovery, bargaining with local kirana merchants, and resolving agricultural irrigation disputes.
 * **Noise Canceller Award (Telephonic Audio Robustness)**:
-  Leverages Gnani.ai's acoustic models trained on millions of hours of noisy telephony data, ensuring reliable transcription even with room echo, low-cost headsets, and background village ambient audio.
+  Leverages Gnani.ai's acoustic models trained on 14M+ hours of telephonic audio, ensuring reliable speech transcription even with laptop microphones, ambient room echo, and village game sound effects.
 * **Jugaad Genius Award (Grounded Agentic Autonomy)**:
   Bridges conversational LLMs directly to an interactive game simulation loop. Spoken negotiations result in physical world consequences—NPCs open toolkits, pathfind across coordinates, inspect blown alternators, and hand over physical inventory items.
-
----
-
-## Key Gameplay Features
-
-### 1. Grounded Physical Autonomy
-No hollow promises. If Arjun the Mechanic agrees to fix the hospital dynamo, he closes his shop counter, pathfinds across the town square to the clinic, equips his wrench, and begins physical repairs. Every action is server-validated and rendered in the 2D game canvas.
-
-<p align="center">
-  <img src="./public/npc_autonomy_and_commands.png" alt="NPC Autonomy and Commands" width="720" />
-</p>
-
-### 2. Multi-Dialect Voice & Retro Keyboard Dual-Input
-Hold `[E]` within an NPC's proximity threshold to activate push-to-talk voice recording. Speak naturally, or toggle instant retro RPG text mode with `[Enter]` for late-night or quiet gaming sessions.
-
-<p align="center">
-  <img src="./public/player_talking_with_npc.png" alt="Player Talking With NPC" width="720" />
-</p>
-
-### 3. Dynamic Price Negotiation Engine
-Bargaining in Kaveripura is not a static button press. Dev the Merchant and Arjun the Mechanic have distinct greed levels, patience counters, and price flexibility profiles. Haggling too aggressively can alienate a vendor, while pointing out communal crises or leveraging high relationship standing unlocks significant discounts.
-
-### 4. 4-Tier Cognitive Memory (Mem0 & PostgreSQL)
-Every villager maintains a living, persistent cognitive state:
-* **Working Memory**: Preserves context across multi-turn active dialogues.
-* **Episodic Memory**: Remembers player promises, favors, thefts, and emergency assistances.
-* **Relational Memory**: Tracks 5 continuous personality metrics (`trust`, `affection`, `respect`, `fear`, `familiarity`) computing social tiers from `trusted_friend` to `hostile_outcast`.
-* **Semantic Memory**: High-importance baseline village lore seeded in PostgreSQL.
-
-<p align="center">
-  <img src="./public/npc_memory_and_relationships.png" alt="NPC Memory and Relationships" width="720" />
-</p>
-
-### 5. Grid-Based Inventory & Barter Economy
-Manage a 15-slot grid inventory containing authentic items: copper induction coils, heavy spanner sets, soldering kits, solar regulators, grain sacks, and emergency medical salves. Drag, drop, equip, and barter items directly inside negotiation modals.
 
 ---
 
@@ -156,13 +275,13 @@ Manage a 15-slot grid inventory containing authentic items: copper induction coi
 
 ---
 
-## Technical Architecture
+## Project Structure
 
 ```
 jeeva_game/
 ├── app/
 │   ├── api/
-│   │   ├── auth/                 # NextAuth credentials & registration
+│   │   ├── auth/                 # NextAuth credentials & registration routes
 │   │   └── npc/
 │   │       ├── stt/route.ts      # Gnani Prisma STT proxy endpoint
 │   │       ├── talk/route.ts     # Unified dialogue, memory, action & TTS route
@@ -186,6 +305,10 @@ jeeva_game/
     ├── npcDialogue.ts            # Evon / LLM prompt builder & tool caller
     ├── wavRecorder.ts            # Web Audio API 16kHz mono linear PCM recorder
     └── memory/                   # Mem0 4-tier cognitive memory architecture
+        ├── embeddings.ts         # 768-dim vector embeddings & cosine similarity
+        ├── mem0Engine.ts         # Working, episodic, and relational memory logic
+        ├── promptBuilder.ts      # Cognitive memory prompt section formatter
+        └── types.ts              # Memory data structures & relationship tiers
 ```
 
 ---
@@ -252,27 +375,15 @@ jeeva_game/
 | Key / Action | Function | Context |
 | :--- | :--- | :--- |
 | **`W` `A` `S` `D`** or **Arrow Keys** | Walk / Move character | Exploration |
-| **`Shift` (Hold)** | Sprint | Movement speed boost |
-| **`E` (Hold)** | **Push-to-Talk Voice Input** | Active within NPC interaction radius |
+| **`Shift` (Hold)** | Sprint (1.7x speed boost) | Movement |
+| **`E` (Hold)** | **Push-to-Talk Voice Input** | Active within 60px NPC interaction radius |
 | **`Enter`** | Open / Send Text Dialogue | Proximity chat modal |
 | **`Tab`** or **`I`** | Open Inventory & Backpack | Anywhere |
 | **`Escape`** | Close current modal / Menu | Universal |
 | **Mouse Left-Click** | Interact with objects / Drag inventory | UI & Trading |
 
 > [!TIP]
-> When speaking with merchants, try negotiating in your native language or code-mixing terms like *"Bhai, discount do na"* to observe the dynamic pricing engine respond to conversational tactics.
-
----
-
-## Tech Stack Summary
-
-* **Frontend Framework**: Next.js 16 (App Router, Turbopack, React 19)
-* **Game Engine**: Phaser 4.2 / Phaser 3 2D Canvas Engine
-* **Speech & AI Intelligence**: Gnani.ai Prisma v3.0 STT, Gnani.ai Timbre v2.5 TTS, Evon v3.3
-* **Database & ORM**: PostgreSQL with Drizzle ORM
-* **Cognitive Memory**: Mem0 Cognitive Framework with Vector Similarity Embeddings
-* **Audio Capture**: Web Audio API 16kHz mono Linear PCM `WavRecorder`
-* **Styling**: Tailwind CSS v4 with retro pixel art tokens
+> When speaking with merchants, try negotiating in your native language or code-mixing terms like *"Bhai, thoda discount do na"* to observe the dynamic pricing engine respond to conversational tactics and calculate deals in real time.
 
 ---
 
