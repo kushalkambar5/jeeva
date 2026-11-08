@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import PixelSprite from "./PixelSprite";
 import PixelButton from "./PixelButton";
-import { Users, Heart, MessageSquare, Shield, Sparkles, Volume2 } from "lucide-react";
+import { Users, Heart, MessageSquare, Shield, Volume2 } from "lucide-react";
 
 export default function CharactersSection() {
   const [selectedCharIndex, setSelectedCharIndex] = useState(0);

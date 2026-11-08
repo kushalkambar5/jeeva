@@ -11,7 +11,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
-  Sparkles,
 } from "lucide-react";
 
 export default function GameplaySection() {

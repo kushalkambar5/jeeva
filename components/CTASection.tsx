@@ -2,7 +2,7 @@
 
 import React from "react";
 import PixelButton from "./PixelButton";
-import { Sparkles, Compass, Check, ShieldCheck, Flame, Radio } from "lucide-react";
+import { Compass, Check, ShieldCheck, Flame, Radio } from "lucide-react";
 
 interface CTASectionProps {
   onOpenSignup: () => void;
@@ -46,7 +46,6 @@ export default function CTASection({
               size="lg"
               onClick={onOpenSignup}
               ariaLabel="Sign up for Jeeva Alpha"
-              icon={<Sparkles className="w-5 h-5 text-darkbrown" />}
               className="w-full sm:w-auto shadow-[4px_4px_0px_#14271A]"
             >
               Sign Up for Alpha Access

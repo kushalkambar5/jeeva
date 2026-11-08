@@ -2,7 +2,6 @@
 
 import React from "react";
 import {
-  Sparkles,
   Mic,
   Brain,
   Users,
@@ -77,7 +76,6 @@ export default function FeaturesSection() {
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 mb-4 border-2 border-[#3D3429] dark:border-[#78A85B] bg-cream dark:bg-[#16221A] shadow-[2px_2px_0px_#14271A]">
-            <Sparkles className="w-4 h-4 text-forest dark:text-gold" />
             <span className="text-xs font-pixel uppercase tracking-widest text-forest dark:text-gold font-bold">
               Unbeatable AI Features
             </span>

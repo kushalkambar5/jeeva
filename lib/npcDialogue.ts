@@ -64,11 +64,26 @@ export interface DialogueGenerationResult {
   latencyMs?: number;
 }
 
+export const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
+  'hi-IN': 'Hindi (हिन्दी)',
+  'en-IN': 'English',
+  'ta-IN': 'Tamil (தமிழ்)',
+  'te-IN': 'Telugu (తెలుగు)',
+  'kn-IN': 'Kannada (ಕನ್ನಡ)',
+  'mr-IN': 'Marathi (मराठी)',
+  'bn-IN': 'Bengali (বাংলা)',
+  'gu-IN': 'Gujarati (ગુજરાતી)',
+  'pa-IN': 'Punjabi (ਪੰਜਾਬੀ)',
+  'ml-IN': 'Malayalam (മലയാളം)',
+  'ur-IN': 'Urdu (اردو)',
+};
+
 /**
  * Builds the prompt using ONLY character traits (name, role, personality traits, speaking style).
  * ZERO story context, storms, disasters, or plot backstories.
  */
 function buildRowTraitsPrompt(traits: NPCTraitsContext, requestedLanguage: string): string {
+  const langName = LANGUAGE_DISPLAY_NAMES[requestedLanguage] || requestedLanguage;
   return `You are roleplaying as ${traits.name}, a village resident.
 Character traits from the 'npc_definitions' database table:
 - Name: ${traits.name}
@@ -81,7 +96,7 @@ STRICT CONSTRAINTS:
 2. Respond directly, naturally, and warmly to whatever the player says or asks.
 3. DO NOT mention or invent any story plots, storms, disasters, missions, or waiting for anyone to return.
 4. You have NO memory of any past conversations.
-5. Reply in 1 natural conversational spoken sentence in the requested language: ${requestedLanguage}.
+5. Reply in 1 natural conversational spoken sentence in the player's language (${langName}). If the player speaks in Hindi, reply in natural conversational Hindi. If the player speaks in English, reply in natural conversational English. If the player speaks in Tamil, reply in natural conversational Tamil, etc.
 6. Output ONLY the spoken words. No quotation marks, no actions, no character name prefix.`;
 }
 

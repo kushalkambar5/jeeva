@@ -15,6 +15,13 @@
       "when": 1794129364831,
       "tag": "0001_gorgeous_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794135041583,
+      "tag": "0002_jittery_warhawk",
+      "breakpoints": true
     }
   ]
 }

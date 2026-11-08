@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import PixelButton from "./PixelButton";
-import { Mic, Sparkles, Volume2, Play, Pause, Compass, ShieldAlert, Cpu } from "lucide-react";
+import { Mic, Volume2, Play, Pause, Compass, ShieldAlert, Cpu } from "lucide-react";
 
 interface HeroSectionProps {
   onOpenLogin: () => void;
@@ -89,7 +89,6 @@ export default function HeroSection({
             onClick={onOpenSignup}
             ariaLabel="Sign up for Jeeva Alpha"
             className="w-full sm:w-auto shadow-[4px_4px_0px_#14271A]"
-            icon={<Sparkles className="w-5 h-5 text-darkbrown" />}
           >
             Start Adventure (Sign Up)
           </PixelButton>

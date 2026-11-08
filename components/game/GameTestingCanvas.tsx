@@ -11,11 +11,7 @@ import {
   MapPin,
   Compass,
   ArrowLeft,
-  Sparkles,
-  Info,
   X,
-  HelpCircle,
-  Footprints,
   Clock,
   Play,
   Pause,
@@ -24,16 +20,17 @@ import {
   Users,
   Calendar,
   ChevronRight,
-  Shield,
-  Heart,
   MessageSquare,
+  Mic,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { PhaserGame, PhaserGameRef } from './PhaserGame';
 import { GameStateEvent, InteractionPoint, NPCWorldState } from './types';
 import { sound } from './audio';
 import PixelSprite from '../PixelSprite';
-import { formatMinutesToTime, timeStringToMinutes } from './npcData';
-import NPCDialogueModal from './NPCDialogueModal';
+import { formatMinutesToTime } from './npcData';
+import { WavRecorder } from '@/lib/wavRecorder';
 
 export default function GameTestingCanvas() {
   const gameRef = useRef<PhaserGameRef>(null);
@@ -52,12 +49,43 @@ export default function GameTestingCanvas() {
   });
 
   const [inspectModal, setInspectModal] = useState<InteractionPoint | null>(null);
-  const [talkingNpc, setTalkingNpc] = useState<NPCWorldState | null>(null);
+
+  // Push-to-Talk Voice State
+  const [voiceState, setVoiceState] = useState<{
+    status: 'idle' | 'recording' | 'processing';
+    recordingSeconds: number;
+    error: string | null;
+    targetNpc: NPCWorldState | null;
+  }>({
+    status: 'idle',
+    recordingSeconds: 0,
+    error: null,
+    targetNpc: null,
+  });
+
+  // Dialogue Subtitles State (Down part of screen: "player: ..." "npc_name: ...")
+  const [subtitleState, setSubtitleState] = useState<{
+    playerText: string;
+    npcName: string;
+    replyText: string;
+    language?: string;
+    audioBase64?: string;
+    isPlayingAudio: boolean;
+    npcSpriteSrc?: string;
+    npcRole?: string;
+  } | null>(null);
+
+  const wavRecorderRef = useRef<WavRecorder | null>(null);
+  const isRecordingRef = useRef<boolean>(false);
+  const recordingStartTimeRef = useRef<number>(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const subtitleDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const [zoomLevel, setZoomLevel] = useState<number>(1.6);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showMinimap, setShowMinimap] = useState<boolean>(false);
-  const [showHelp, setShowHelp] = useState<boolean>(false);
   const [showRoster, setShowRoster] = useState<boolean>(false);
   const [isClockPaused, setIsClockPaused] = useState<boolean>(false);
   const [timeSliderValue, setTimeSliderValue] = useState<number>(570);
@@ -67,7 +95,6 @@ export default function GameTestingCanvas() {
       if (event.isInsideInterior !== prev.isInsideInterior) {
         setShowMinimap(false);
         setInspectModal(null);
-        setTalkingNpc(null);
       }
       return event;
     });
@@ -103,7 +130,220 @@ export default function GameTestingCanvas() {
     }
   };
 
-  const handleTriggerInteraction = () => {
+  // Clean up audio & recording timers on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (subtitleDismissTimerRef.current) clearTimeout(subtitleDismissTimerRef.current);
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  const replaySubtitleAudio = useCallback((base64: string) => {
+    if (!base64) return;
+    try {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+      const audio = new Audio(`data:audio/wav;base64,${base64}`);
+      currentAudioRef.current = audio;
+      setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: true } : null));
+      audio.onended = () => {
+        setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+      };
+      audio.onerror = () => {
+        setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+      };
+      audio.play().catch((err) => console.warn('Audio replay error:', err));
+    } catch (e) {
+      console.warn('Replay audio failed:', e);
+    }
+  }, []);
+
+  const startVoiceRecording = useCallback(async (npc: NPCWorldState) => {
+    if (isRecordingRef.current) return;
+
+    // Pause any playing audio & clear dismiss timers
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    if (subtitleDismissTimerRef.current) {
+      clearTimeout(subtitleDismissTimerRef.current);
+      subtitleDismissTimerRef.current = null;
+    }
+
+    try {
+      if (!wavRecorderRef.current) {
+        wavRecorderRef.current = new WavRecorder();
+      }
+      await wavRecorderRef.current.start();
+      isRecordingRef.current = true;
+      recordingStartTimeRef.current = Date.now();
+
+      setVoiceState({
+        status: 'recording',
+        recordingSeconds: 0,
+        error: null,
+        targetNpc: npc,
+      });
+
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(() => {
+        setVoiceState((prev) =>
+          prev.status === 'recording'
+            ? { ...prev, recordingSeconds: prev.recordingSeconds + 1 }
+            : prev
+        );
+      }, 1000);
+    } catch (err: unknown) {
+      isRecordingRef.current = false;
+      const msg = err instanceof Error ? err.message : String(err);
+      setVoiceState({
+        status: 'idle',
+        recordingSeconds: 0,
+        error: `Mic error: ${msg}. Check browser microphone permissions.`,
+        targetNpc: null,
+      });
+      setTimeout(() => {
+        setVoiceState((prev) => (prev.error?.includes('Mic error') ? { ...prev, error: null } : prev));
+      }, 5000);
+    }
+  }, []);
+
+  const stopVoiceRecordingAndSend = useCallback(async () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    if (!isRecordingRef.current || !wavRecorderRef.current) {
+      isRecordingRef.current = false;
+      return;
+    }
+
+    isRecordingRef.current = false;
+    const durationMs = Date.now() - recordingStartTimeRef.current;
+
+    // Guard against accidental tap (< 350ms)
+    if (durationMs < 350) {
+      try {
+        await wavRecorderRef.current.stop();
+      } catch {}
+      setVoiceState({
+        status: 'idle',
+        recordingSeconds: 0,
+        error: 'Hold Space while speaking, then release Space to send.',
+        targetNpc: null,
+      });
+      setTimeout(() => {
+        setVoiceState((prev) => (prev.error?.includes('Hold Space') ? { ...prev, error: null } : prev));
+      }, 4000);
+      return;
+    }
+
+    const targetNpc =
+      voiceState.targetNpc ||
+      (gameState.activeInteraction?.type === 'npc' ? gameState.activeInteraction.npcData : null);
+
+    if (!targetNpc) {
+      try {
+        await wavRecorderRef.current.stop();
+      } catch {}
+      setVoiceState({
+        status: 'idle',
+        recordingSeconds: 0,
+        error: 'Step closer to an NPC to talk.',
+        targetNpc: null,
+      });
+      return;
+    }
+
+    setVoiceState((prev) => ({ ...prev, status: 'processing', error: null }));
+
+    try {
+      const audioBlob = await wavRecorderRef.current.stop();
+
+      const dist = Math.hypot(gameState.playerX - targetNpc.x, gameState.playerY - targetNpc.y);
+      const formData = new FormData();
+      formData.append('npcId', targetNpc.id);
+      formData.append('language', 'auto');
+      formData.append('playerDistance', dist.toFixed(1));
+      formData.append('audio', audioBlob, 'speech.wav');
+
+      const res = await fetch('/api/npc/talk', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to talk with NPC');
+      }
+
+      // 1. Play synthesized NPC sound reply
+      if (data.audioBase64) {
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause();
+          currentAudioRef.current = null;
+        }
+        const audio = new Audio(`data:audio/wav;base64,${data.audioBase64}`);
+        currentAudioRef.current = audio;
+        audio.onplay = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: true } : null));
+        };
+        audio.onended = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+          if (subtitleDismissTimerRef.current) clearTimeout(subtitleDismissTimerRef.current);
+          subtitleDismissTimerRef.current = setTimeout(() => {
+            setSubtitleState(null);
+          }, 8000);
+        };
+        audio.onerror = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+        };
+        audio.play().catch((playErr) => console.warn('Audio play error:', playErr));
+      }
+
+      // 2. Display Subtitles at the bottom of the screen:
+      // "player: ....................................."
+      // "npc_name: ......................."
+      setSubtitleState({
+        playerText: data.playerText,
+        npcName: data.npcName || targetNpc.name,
+        replyText: data.replyText,
+        language: data.language,
+        audioBase64: data.audioBase64 || undefined,
+        isPlayingAudio: Boolean(data.audioBase64),
+        npcSpriteSrc: targetNpc.spriteSrc,
+        npcRole: data.npcRole || targetNpc.activityLabel || 'Villager',
+      });
+
+      setVoiceState({
+        status: 'idle',
+        recordingSeconds: 0,
+        error: null,
+        targetNpc: null,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setVoiceState({
+        status: 'idle',
+        recordingSeconds: 0,
+        error: msg,
+        targetNpc: null,
+      });
+      setTimeout(() => {
+        setVoiceState((prev) => (prev.error ? { ...prev, error: null } : prev));
+      }, 5000);
+    }
+  }, [gameState.activeInteraction, gameState.playerX, gameState.playerY, voiceState.targetNpc]);
+
+  const handleTriggerInteraction = useCallback(() => {
     if (gameState.activeInteraction) {
       const isDoor =
         gameState.activeInteraction.type === 'door' &&
@@ -113,17 +353,19 @@ export default function GameTestingCanvas() {
       gameRef.current?.triggerInteraction();
 
       if (gameState.activeInteraction.type === 'npc' && gameState.activeInteraction.npcData) {
-        setTalkingNpc(gameState.activeInteraction.npcData);
-        setInspectModal(null);
+        // Prompt player to hold Space
+        setVoiceState((prev) => ({
+          ...prev,
+          error: `Hold [Space] to speak with ${gameState.activeInteraction?.name}!`,
+        }));
+        setTimeout(() => setVoiceState((prev) => ({ ...prev, error: null })), 3000);
       } else if (!isDoor && !isExit) {
         setInspectModal(gameState.activeInteraction);
-        setTalkingNpc(null);
       } else {
         setInspectModal(null);
-        setTalkingNpc(null);
       }
     }
-  };
+  }, [gameState.activeInteraction]);
 
   const handleSetPresetTime = (minutes: number) => {
     setTimeSliderValue(minutes);
@@ -161,46 +403,78 @@ export default function GameTestingCanvas() {
         return;
       }
 
+      // SPACEBAR: Push-to-Talk for NPCs (or Interact if object)
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        if (e.repeat) return;
+
+        if (gameState.activeInteraction?.type === 'npc' && gameState.activeInteraction.npcData) {
+          startVoiceRecording(gameState.activeInteraction.npcData);
+        } else if (gameState.activeInteraction) {
+          handleTriggerInteraction();
+        }
+        return;
+      }
+
       if ((e.key === 'm' || e.key === 'M') && !gameState.isInsideInterior) {
         setShowMinimap((prev) => !prev);
-      }
-      if (e.key === 'h' || e.key === 'H') {
-        setShowHelp((prev) => !prev);
       }
       if (e.key === 'r' || e.key === 'R') {
         setShowRoster((prev) => !prev);
       }
       if (e.key === 'e' || e.key === 'E') {
         if (gameState.activeInteraction) {
-          const isDoor =
-            gameState.activeInteraction.type === 'door' &&
-            Boolean(gameState.activeInteraction.targetInterior);
-          const isExit = gameState.activeInteraction.type === 'exit_door';
-
           if (gameState.activeInteraction.type === 'npc' && gameState.activeInteraction.npcData) {
-            setTalkingNpc(gameState.activeInteraction.npcData);
-            setInspectModal(null);
-          } else if (!isDoor && !isExit) {
-            setInspectModal(gameState.activeInteraction);
-            setTalkingNpc(null);
+            setVoiceState((prev) => ({
+              ...prev,
+              error: `Hold [Space] to speak with ${gameState.activeInteraction?.name}!`,
+            }));
+            setTimeout(() => setVoiceState((prev) => ({ ...prev, error: null })), 3000);
           } else {
-            setInspectModal(null);
-            setTalkingNpc(null);
+            handleTriggerInteraction();
           }
         }
       }
       if (e.key === 'Escape') {
         setInspectModal(null);
-        setTalkingNpc(null);
         setShowMinimap(false);
-        setShowHelp(false);
         setShowRoster(false);
+        if (subtitleState) {
+          if (currentAudioRef.current) {
+            currentAudioRef.current.pause();
+            currentAudioRef.current = null;
+          }
+          setSubtitleState(null);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (targetTag === 'input' || targetTag === 'textarea') return;
+
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        if (isRecordingRef.current) {
+          stopVoiceRecordingAndSend();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState.activeInteraction, gameState.isInsideInterior]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [
+    gameState.activeInteraction,
+    gameState.isInsideInterior,
+    handleTriggerInteraction,
+    startVoiceRecording,
+    stopVoiceRecordingAndSend,
+    subtitleState,
+  ]);
 
   // Mini-map coordinates scaling (1920x1440 map -> 280x210 minimap)
   const mapWidth = 1920;
@@ -386,15 +660,6 @@ export default function GameTestingCanvas() {
             )}
           </button>
 
-          {/* Help Toggle */}
-          <button
-            onClick={() => setShowHelp((prev) => !prev)}
-            title="Controls & Village Guide (Key: H)"
-            className="p-1.5 rounded bg-[#1F3B27] hover:bg-[#315B3C] border border-[#28392E] text-[#FFF8E9] transition"
-          >
-            <HelpCircle className="w-4 h-4 text-[#F4D477]" />
-          </button>
-
           {/* Fullscreen */}
           <button
             onClick={handleToggleFullscreen}
@@ -406,41 +671,193 @@ export default function GameTestingCanvas() {
         </div>
       </header>
 
-      {/* 3. PROXIMITY INTERACTION BANNER */}
-      {gameState.activeInteraction && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 animate-bounce">
-          <button
-            onClick={handleTriggerInteraction}
-            className={`px-4 py-2 bg-[#14271A]/95 border-2 rounded-lg shadow-2xl flex items-center gap-2.5 text-sm font-pixel transition cursor-pointer ${
-              gameState.activeInteraction.type === 'npc'
-                ? 'border-[#F4D477] text-[#FFF8E9] hover:bg-[#1F3B27] ring-2 ring-[#F4D477]/40'
-                : gameState.activeInteraction.type === 'door' ||
-                  gameState.activeInteraction.type === 'exit_door'
-                ? 'border-[#93C476] text-[#FFF8E9] hover:bg-[#1F3B27] ring-2 ring-[#78A85B]/50'
-                : 'border-[#F4D477] text-[#FFF8E9] hover:bg-[#1F3B27]'
-            }`}
-          >
-            <span className="w-6 h-6 rounded bg-[#F4D477] text-[#0F1712] font-bold flex items-center justify-center text-xs">
-              E
-            </span>
-            <span>
-              {gameState.activeInteraction.type === 'npc'
-                ? 'Talk with'
-                : gameState.activeInteraction.actionLabel || 'Interact'}:{' '}
-              <strong className="text-[#F4D477]">{gameState.activeInteraction.name}</strong>
-            </span>
-            {gameState.activeInteraction.type === 'npc' && (
-              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-[#315B3C] text-[#93C476] border border-[#78A85B]/40 flex items-center gap-1 font-mono">
-                <span>Gnani Voice</span>
-                {gameState.activeInteraction.distanceToPlayer !== undefined && (
-                  <span className="text-[#F4D477]">
-                    ({gameState.activeInteraction.distanceToPlayer}px / 60px)
+      {/* 3. PROXIMITY INTERACTION BANNER & VOICE PUSH-TO-TALK HUD */}
+      {/* 3A. Active Voice Recording Indicator (While Space is held) */}
+      {voiceState.status === 'recording' && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#14271A]/95 backdrop-blur-md border-2 border-[#E05252] rounded-xl px-5 py-3 shadow-2xl flex items-center gap-3.5 animate-pulse">
+          <span className="relative flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500"></span>
+          </span>
+          <Mic className="w-5 h-5 text-red-400 animate-bounce" />
+          <div className="text-sm font-pixel text-[#FFF8E9]">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[#F4D477]">Listening...</span>
+              <span className="text-[11px] font-mono text-[#BAC9B9]">
+                ({voiceState.recordingSeconds}s)
+              </span>
+            </div>
+            <div className="text-[11px] font-mono text-[#BAC9B9]">
+              Release <span className="text-white font-bold">[Space]</span> when done speaking
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3B. Processing Voice Indicator */}
+      {voiceState.status === 'processing' && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#14271A]/95 backdrop-blur-md border-2 border-[#F4D477] rounded-xl px-5 py-3 shadow-2xl flex items-center gap-3">
+          <Loader2 className="w-5 h-5 text-[#F4D477] animate-spin" />
+          <div className="text-sm font-pixel text-[#FFF8E9]">
+            <div className="font-bold text-[#F4D477]">Processing & Auto-detecting Language...</div>
+            <div className="text-[11px] font-mono text-[#93C476]">
+              {voiceState.targetNpc?.name || 'Villager'} is preparing spoken reply
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3C. Error Notice */}
+      {voiceState.error && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40 bg-[#3A1414]/95 backdrop-blur-md border border-[#E05252] rounded-lg px-4 py-2 text-xs text-[#FFC1C1] font-mono shadow-xl flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-[#E05252] shrink-0" />
+          <span>{voiceState.error}</span>
+        </div>
+      )}
+
+      {/* 3D. Dialogue Subtitle Box (Down part of screen) */}
+      {subtitleState && voiceState.status === 'idle' && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[94%] md:w-full bg-[#14271A]/95 backdrop-blur-md border-2 border-[#78A85B] rounded-xl p-4 md:p-5 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#28392E]">
+            <div className="flex items-center gap-2.5">
+              {subtitleState.npcSpriteSrc && (
+                <div className="w-7 h-7 rounded bg-[#1F3B27] border border-[#78A85B]/50 flex items-center justify-center overflow-hidden shrink-0">
+                  <PixelSprite
+                    src={subtitleState.npcSpriteSrc}
+                    frameWidth={32}
+                    frameHeight={32}
+                    scale={1.1}
+                    animate={false}
+                  />
+                </div>
+              )}
+              <div>
+                <span className="font-pixel text-xs text-[#F4D477] font-bold tracking-wide">
+                  {subtitleState.npcName}
+                </span>
+                {subtitleState.npcRole && (
+                  <span className="text-[10px] text-[#BAC9B9] ml-2 font-mono">
+                    ({subtitleState.npcRole})
                   </span>
                 )}
+              </div>
+              {subtitleState.isPlayingAudio && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#315B3C] text-[#93C476] text-[10px] font-mono animate-pulse">
+                  <Volume2 className="w-3 h-3 text-[#F4D477]" />
+                  <span>Speaking</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {subtitleState.audioBase64 && (
+                <button
+                  onClick={() => replaySubtitleAudio(subtitleState.audioBase64!)}
+                  title="Replay Voice Audio"
+                  className="px-2 py-0.5 rounded bg-[#1F3B27] hover:bg-[#315B3C] border border-[#28392E] text-[#F4D477] transition cursor-pointer flex items-center gap-1 text-[10px] font-mono"
+                >
+                  <Volume2 className="w-3 h-3" />
+                  <span>Replay Voice</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (currentAudioRef.current) {
+                    currentAudioRef.current.pause();
+                    currentAudioRef.current = null;
+                  }
+                  setSubtitleState(null);
+                }}
+                className="p-1 rounded text-[#BAC9B9] hover:text-white hover:bg-[#1F3B27] transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* User Requested Format:
+              "player: ....................................."
+              "npc_name: ......................." */}
+          <div className="space-y-1.5 text-sm md:text-[15px] font-sans leading-relaxed">
+            <div className="bg-[#0F1712]/70 rounded-lg p-2.5 border border-[#28392E] flex items-start gap-2">
+              <span className="font-pixel font-bold text-[#75B9D0] text-sm md:text-base shrink-0 select-none">
+                player:
+              </span>
+              <span className="text-[#FFF8E9] leading-snug">
+                {subtitleState.playerText}
+              </span>
+            </div>
+
+            <div className="bg-[#0F1712]/70 rounded-lg p-2.5 border border-[#28392E] flex items-start gap-2">
+              <span className="font-pixel font-bold text-[#F4D477] text-sm md:text-base shrink-0 select-none">
+                {subtitleState.npcName.toLowerCase()}:
+              </span>
+              <span className="text-[#FFF8E9] font-medium leading-snug">
+                {subtitleState.replyText}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 mt-2 border-t border-[#28392E]/60 text-[11px] font-mono text-[#93C476]/80">
+            <div className="flex items-center gap-1.5">
+              
+              <span>Hold <span className="px-1.5 py-0.5 rounded bg-[#1F3B27] border border-[#78A85B]/40 text-[#F4D477] font-bold font-pixel text-[10px]">
+                SPACE
+              </span> to speak again</span>
+            </div>
+            {subtitleState.language && (
+              <span className="text-[10px] text-stone-400">
+                Auto-detected: {subtitleState.language}
               </span>
             )}
-            <Sparkles className="w-4 h-4 text-[#F4D477] animate-spin" />
-          </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3E. Proximity Interaction Banner (When near NPC or Object) */}
+      {gameState.activeInteraction && voiceState.status === 'idle' && !subtitleState && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 animate-bounce">
+          {gameState.activeInteraction.type === 'npc' && gameState.activeInteraction.npcData ? (
+            <div
+              onPointerDown={() => {
+                if (gameState.activeInteraction?.npcData) {
+                  startVoiceRecording(gameState.activeInteraction.npcData);
+                }
+              }}
+              onPointerUp={stopVoiceRecordingAndSend}
+              onPointerLeave={() => {
+                if (isRecordingRef.current) stopVoiceRecordingAndSend();
+              }}
+              className="px-4 py-2 bg-[#14271A]/95 border-2 border-[#F4D477] text-[#FFF8E9] hover:bg-[#1F3B27] rounded-lg shadow-2xl flex items-center gap-2.5 text-sm font-pixel ring-2 ring-[#F4D477]/40 transition cursor-pointer select-none"
+            >
+              
+              <Mic className="w-4 h-4 text-[#F4D477]" />
+              <span>
+                Hold <span className="px-2 py-0.5 rounded bg-[#F4D477] text-[#0F1712] font-bold text-xs tracking-wider">
+                SPACE
+              </span> to talk with{' '}
+                <strong className="text-[#F4D477]">{gameState.activeInteraction.name}</strong>
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={handleTriggerInteraction}
+              className={`px-4 py-2 bg-[#14271A]/95 border-2 rounded-lg shadow-2xl flex items-center gap-2.5 text-sm font-pixel transition cursor-pointer ${
+                gameState.activeInteraction.type === 'door' ||
+                gameState.activeInteraction.type === 'exit_door'
+                  ? 'border-[#93C476] text-[#FFF8E9] hover:bg-[#1F3B27] ring-2 ring-[#78A85B]/50'
+                  : 'border-[#F4D477] text-[#FFF8E9] hover:bg-[#1F3B27]'
+              }`}
+            >
+              <span className="w-6 h-6 rounded bg-[#F4D477] text-[#0F1712] font-bold flex items-center justify-center text-xs">
+                E
+              </span>
+              <span>
+                {gameState.activeInteraction.actionLabel || 'Interact'}:{' '}
+                <strong className="text-[#F4D477]">{gameState.activeInteraction.name}</strong>
+              </span>
+            </button>
+          )}
         </div>
       )}
 
@@ -458,16 +875,16 @@ export default function GameTestingCanvas() {
             <span className="text-[#93C476] font-mono">Shift</span>: Sprint
           </div>
           <div>
-            <span className="text-[#93C476] font-mono">E / Space</span>: Talk / Inspect
+            <span className="text-[#93C476] font-mono">Hold Space</span>: Push-to-Talk (NPC)
           </div>
           <div>
-            <span className="text-[#93C476] font-mono">R</span>: NPC Schedule
+            <span className="text-[#93C476] font-mono">E</span>: Open Doors / Inspect
+          </div>
+          <div>
+            <span className="text-[#93C476] font-mono">R</span>: Villager Roster
           </div>
           <div>
             <span className="text-[#93C476] font-mono">M</span>: Village Map
-          </div>
-          <div>
-            <span className="text-[#93C476] font-mono">Esc</span>: Close Modals
           </div>
         </div>
       </div>
@@ -616,14 +1033,19 @@ export default function GameTestingCanvas() {
                   <button
                     onClick={() => {
                       if (inspectModal.npcData) {
-                        setTalkingNpc(inspectModal.npcData);
+                        const target = inspectModal.npcData;
                         setInspectModal(null);
+                        setVoiceState((prev) => ({
+                          ...prev,
+                          error: `Hold [Space] to speak with ${target.name}!`,
+                        }));
+                        setTimeout(() => setVoiceState((prev) => ({ ...prev, error: null })), 3000);
                       }
                     }}
                     className="px-3.5 py-1.5 bg-[#F4D477] hover:bg-[#ffe188] text-black font-pixel text-xs font-bold rounded shadow transition cursor-pointer flex items-center gap-1.5"
                   >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Talk (Voice & Text)</span>
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>Talk (Hold Space)</span>
                   </button>
 
                   <button
@@ -646,7 +1068,6 @@ export default function GameTestingCanvas() {
               </button>
 
               <div className="flex items-center gap-2 mb-2 font-pixel text-xl text-[#F4D477]">
-                <Sparkles className="w-5 h-5 text-[#93C476]" />
                 <span>{inspectModal.title}</span>
               </div>
 
@@ -676,19 +1097,6 @@ export default function GameTestingCanvas() {
             </div>
           )}
         </div>
-      )}
-
-      {/* 5.1 MULTILINGUAL NPC VOICE DIALOGUE MODAL (GNANI AI) */}
-      {talkingNpc && (
-        <NPCDialogueModal
-          npc={talkingNpc}
-          playerDistance={Math.hypot(
-            gameState.playerX - talkingNpc.x,
-            gameState.playerY - talkingNpc.y
-          )}
-          thresholdRadius={60}
-          onClose={() => setTalkingNpc(null)}
-        />
       )}
 
       {/* 6. NPC ROSTER & SCHEDULE INSPECTOR DRAWER (Toggle via R button) */}
@@ -750,12 +1158,16 @@ export default function GameTestingCanvas() {
                     <button
                       onClick={() => {
                         handleTeleportToNpc(npc);
-                        setTalkingNpc(npc);
+                        setVoiceState((prev) => ({
+                          ...prev,
+                          error: `Hold [Space] to speak with ${npc.name}!`,
+                        }));
+                        setTimeout(() => setVoiceState((prev) => ({ ...prev, error: null })), 3000);
                       }}
-                      title="Approach & Talk with this NPC"
+                      title="Approach & Talk with this NPC (Hold Space)"
                       className="px-2 py-1 rounded bg-[#F4D477] hover:bg-[#ffe188] text-black font-pixel text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                     >
-                      <MessageSquare className="w-3 h-3" />
+                      <Mic className="w-3 h-3" />
                       <span>Talk</span>
                     </button>
 
@@ -932,49 +1344,6 @@ export default function GameTestingCanvas() {
             <span>Red: You</span>
             <span className="text-[#F4D477]">Gold: Villagers</span>
             <span>X:{gameState.playerX} Y:{gameState.playerY}</span>
-          </div>
-        </div>
-      )}
-
-      {/* 8. CONTROLS GUIDE MODAL (Press H) */}
-      {showHelp && (
-        <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#14271A] border-2 border-[#78A85B] rounded-xl p-6 max-w-lg w-full shadow-2xl relative">
-            <button
-              onClick={() => setShowHelp(false)}
-              className="absolute top-4 right-4 p-1.5 rounded hover:bg-[#1F3B27] text-[#F3F4F1]/70 hover:text-white cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <h3 className="font-pixel text-xl text-[#F4D477] mb-2 font-bold flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-[#93C476]" />
-              <span>Village Exploration & Schedule Guide</span>
-            </h3>
-
-            <div className="space-y-3 text-xs text-[#FFF8E9]/90 font-sans mt-3">
-              <p>
-                Welcome to <strong>Kaveripura</strong>! All 10 pre-defined NPCs roam the village and follow their <strong>default_schedule</strong> routines across morning, midday, and night.
-              </p>
-
-              <div className="bg-[#0F1712] border border-[#28392E] rounded-lg p-3 space-y-1 font-mono text-[11px]">
-                <div><span className="text-[#93C476]">WASD / Arrow Keys</span>: Walk around the village</div>
-                <div><span className="text-[#93C476]">Shift</span>: Sprint through pathways</div>
-                <div><span className="text-[#93C476]">E / Space</span>: Speak with approaching villagers & inspect buildings</div>
-                <div><span className="text-[#93C476]">R</span>: Toggle the Villagers Schedule Roster</div>
-                <div><span className="text-[#93C476]">Time Bar (Header)</span>: Scrub or jump between Dawn, Morning, Midday & Night</div>
-                <div><span className="text-[#93C476]">M</span>: Open the full village minimap with live NPC positions</div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowHelp(false)}
-                className="px-4 py-1.5 bg-[#315B3C] hover:bg-[#78A85B] border border-[#78A85B] rounded font-pixel text-xs text-[#FFF8E9] transition cursor-pointer"
-              >
-                Got It, Let&apos;s Play
-              </button>
-            </div>
           </div>
         </div>
       )}

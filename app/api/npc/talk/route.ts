@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getNPCTraits, generateNPCDialogue } from '@/lib/npcDialogue';
-import { transcribeAudio, synthesizeSpeech } from '@/lib/gnani';
+import { transcribeAudio, synthesizeSpeech, normalizeLanguageCode } from '@/lib/gnani';
 
 // Configured threshold radius for speaking with an NPC in pixels
 export const TALK_THRESHOLD_RADIUS = 60;
@@ -10,14 +10,14 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get('content-type') || '';
     let npcId = '';
     let playerDistance: number | undefined;
-    let language = 'hi-IN';
+    let language = 'auto';
     let messageText = '';
     let audioFile: Blob | null = null;
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
       npcId = (formData.get('npcId') as string) || '';
-      language = (formData.get('language') as string) || 'hi-IN';
+      language = (formData.get('language') as string) || 'auto';
       messageText = (formData.get('message') as string) || '';
       const distStr = formData.get('playerDistance') as string;
       if (distStr) {
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     } else {
       const json = await req.json();
       npcId = json.npcId || '';
-      language = json.language || 'hi-IN';
+      language = json.language || 'auto';
       messageText = json.message || '';
       playerDistance = json.playerDistance;
     }
@@ -103,11 +103,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Normalize and auto-detect the language
+    const resolvedLanguage = normalizeLanguageCode(
+      detectedLang !== 'auto' ? detectedLang : undefined,
+      transcribedText
+    );
+
     // 2. Generate NPC reply strictly using the NPC's traits (stateless, no memory)
     const dialogueResult = await generateNPCDialogue(
       traits,
       transcribedText,
-      detectedLang
+      resolvedLanguage
     );
 
     // 3. Synthesize spoken audio for the NPC reply via Gnani TTS (Timbre v2.5)

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Pixelify_Sans, Nunito } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import SessionProvider from "@/components/SessionProvider";
 
 const pixelifySans = Pixelify_Sans({
   variable: "--font-pixelify-sans",
@@ -37,7 +38,9 @@ export default function RootLayout({
       className={`${pixelifySans.variable} ${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans bg-cream text-darkbrown dark:bg-[#0F1712] dark:text-[#F3F4F1] transition-colors duration-200">
-        <ThemeProvider>{children}</ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   );

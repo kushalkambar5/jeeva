@@ -3,15 +3,17 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useTheme } from "./ThemeProvider";
 import PixelButton from "./PixelButton";
-import { Sun, Moon, Menu, X, ShieldAlert, Sparkles, Volume2 } from "lucide-react";
+import { Sun, Moon, Menu, X, ShieldAlert, Volume2, LayoutDashboard } from "lucide-react";
 
 interface NavbarProps {
   onOpenLogin: () => void;
 }
 
 export default function Navbar({ onOpenLogin }: NavbarProps) {
+  const { data: session } = useSession();
   const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -84,16 +86,28 @@ export default function Navbar({ onOpenLogin }: NavbarProps) {
               )}
             </button>
 
-            {/* Login Button in Navbar using reusable PixelButton */}
+            {/* Login or Dashboard Button in Navbar using reusable PixelButton */}
             <div className="hidden sm:block">
-              <PixelButton
-                variant="forest"
-                size="sm"
-                onClick={onOpenLogin}
-                ariaLabel="Log in to Jeeva"
-              >
-                Login
-              </PixelButton>
+              {session?.user ? (
+                <PixelButton
+                  variant="gold"
+                  size="sm"
+                  href="/dashboard"
+                  icon={<LayoutDashboard className="w-3.5 h-3.5" />}
+                  ariaLabel="Go to Dashboard"
+                >
+                  Dashboard
+                </PixelButton>
+              ) : (
+                <PixelButton
+                  variant="forest"
+                  size="sm"
+                  onClick={onOpenLogin}
+                  ariaLabel="Log in to Jeeva"
+                >
+                  Login
+                </PixelButton>
+              )}
             </div>
 
             {/* Mobile menu button */}
@@ -125,16 +139,27 @@ export default function Navbar({ onOpenLogin }: NavbarProps) {
             ))}
           </nav>
           <div className="pt-2 border-t border-dashed border-[#6F6657]/30">
-            <PixelButton
-              variant="forest"
-              size="full"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onOpenLogin();
-              }}
-            >
-              Login to Village
-            </PixelButton>
+            {session?.user ? (
+              <PixelButton
+                variant="gold"
+                size="full"
+                href="/dashboard"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Go to Dashboard
+              </PixelButton>
+            ) : (
+              <PixelButton
+                variant="forest"
+                size="full"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenLogin();
+                }}
+              >
+                Login to Village
+              </PixelButton>
+            )}
           </div>
         </div>
       )}

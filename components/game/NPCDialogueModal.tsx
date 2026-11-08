@@ -7,7 +7,6 @@ import {
   Send,
   Volume2,
   X,
-  Sparkles,
   Languages,
   Radio,
   CheckCircle2,
@@ -369,8 +368,7 @@ export default function NPCDialogueModal({
             <CheckCircle2 className="w-3 h-3 text-[#93C476]" />
             <span>Context: NPC_definitions traits only</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[#F4D477]">
-            <Sparkles className="w-3 h-3" />
+          <div className="text-[#F4D477]">
             <span>Stateless (Memory disabled)</span>
           </div>
         </div>
@@ -400,9 +398,6 @@ export default function NPCDialogueModal({
         <div className="flex-1 p-4 overflow-y-auto space-y-3.5 min-h-[220px]">
           {messages.length === 0 && (
             <div className="p-6 rounded-xl bg-[#0F1712]/70 border border-[#28392E] text-center my-auto space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-full bg-[#1F3B27] border border-[#78A85B] flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-[#F4D477]" />
-              </div>
               <div>
                 <h4 className="font-pixel text-base text-[#F4D477]">
                   Speak or message {npc.name}

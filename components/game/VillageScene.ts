@@ -789,6 +789,8 @@ export class VillageScene extends Phaser.Scene {
     if (!this.input.keyboard) return;
 
     this.cursors = this.input.keyboard.createCursorKeys();
+    // Do not capture Space in Phaser so window can handle push-to-talk voice interactions cleanly
+    this.input.keyboard.removeCapture(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.wasd = {
       up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
       down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
@@ -805,14 +807,10 @@ export class VillageScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-E', () => {
       this.triggerActiveInteraction();
     });
-    this.input.keyboard.on('keydown-SPACE', () => {
-      this.triggerActiveInteraction();
-    });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.keyboard?.off('keydown-Z');
       this.input.keyboard?.off('keydown-E');
-      this.input.keyboard?.off('keydown-SPACE');
       this.scale.off('resize', this.handleResize, this);
     });
   }
