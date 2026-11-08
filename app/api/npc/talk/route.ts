@@ -146,6 +146,13 @@ export async function POST(req: NextRequest) {
       audioBase64,
       thresholdRadius: TALK_THRESHOLD_RADIUS,
       playerDistance,
+      toolCall: dialogueResult.toolCall
+        ? {
+            tool: dialogueResult.toolCall,
+            targetNpcId: traits.id,
+            targetNpcName: traits.name,
+          }
+        : null,
       apiDetails: {
         llmModel: dialogueResult.modelUsed,
         llmLatencyMs: dialogueResult.latencyMs,

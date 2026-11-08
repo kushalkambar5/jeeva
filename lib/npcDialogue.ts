@@ -62,6 +62,7 @@ export interface DialogueGenerationResult {
   voice: string;
   modelUsed: string;
   latencyMs?: number;
+  toolCall?: 'follow_player' | 'stop_following' | 'open_trade';
 }
 
 export const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
@@ -97,7 +98,12 @@ STRICT CONSTRAINTS:
 3. DO NOT mention or invent any story plots, storms, disasters, missions, or waiting for anyone to return.
 4. You have NO memory of any past conversations.
 5. Reply in 1 natural conversational spoken sentence in the player's language (${langName}). If the player speaks in Hindi, reply in natural conversational Hindi. If the player speaks in English, reply in natural conversational English. If the player speaks in Tamil, reply in natural conversational Tamil, etc.
-6. Output ONLY the spoken words. No quotation marks, no actions, no character name prefix.`;
+6. Output ONLY the spoken words. No quotation marks, no character name prefix.
+
+AVAILABLE TOOLS & ACTIONS:
+- If the player asks or invites you to follow them (e.g. "follow me", "mere saath aao", "chalo saath", "come with me"), accept enthusiastically and append "[TOOL: follow_player]" at the very end of your response.
+- If the player asks you to stop following or stay (e.g. "stay here", "ruko yahan", "stop following", "wait here"), acknowledge politely and append "[TOOL: stop_following]" at the very end.
+- If you are a merchant or mechanic (or if the player asks to trade, negotiate prices, buy, or sell items), invite them to do business and append "[TOOL: open_trade]" at the very end.`;
 }
 
 /**
@@ -152,17 +158,18 @@ export async function generateNPCDialogue(
           let rawReply = data.choices?.[0]?.message?.content?.trim() || '';
           const latencyMs = Date.now() - startTime;
 
-          // Clean any unwanted prefix or formatting artifacts
-          rawReply = cleanSpokenDialogue(rawReply, traits.name);
+          const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id);
+          const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
 
-          if (rawReply) {
-            console.log(`[LLM Response] Groq ${model} (${latencyMs}ms): "${rawReply}"`);
+          if (finalReply) {
+            console.log(`[LLM Response] Groq ${model} (${latencyMs}ms): "${finalReply}" [Tool: ${toolCall || 'none'}]`);
             return {
-              replyText: rawReply,
+              replyText: finalReply,
               language: lang,
               voice,
               modelUsed: `Groq/${model}`,
               latencyMs,
+              toolCall,
             };
           }
         } else {
@@ -199,16 +206,18 @@ export async function generateNPCDialogue(
         const data = await res.json();
         let rawReply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
         const latencyMs = Date.now() - startTime;
-        rawReply = cleanSpokenDialogue(rawReply, traits.name);
+        const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id);
+        const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
 
-        if (rawReply) {
-          console.log(`[LLM Response] Gemini 1.5 Flash (${latencyMs}ms): "${rawReply}"`);
+        if (finalReply) {
+          console.log(`[LLM Response] Gemini 1.5 Flash (${latencyMs}ms): "${rawReply}" [Tool: ${toolCall || 'none'}]`);
           return {
-            replyText: rawReply,
+            replyText: finalReply,
             language: lang,
             voice,
             modelUsed: 'Google/gemini-1.5-flash',
             latencyMs,
+            toolCall,
           };
         }
       }
@@ -221,6 +230,68 @@ export async function generateNPCDialogue(
   throw new Error(
     `Dialogue generation failed: No active LLM provider available. Please verify GROQ_API_KEY in .env.`
   );
+}
+
+/**
+ * Detects tool calls from LLM output tags or player intent and strips tags from text.
+ */
+export function detectToolAndClean(
+  rawText: string,
+  playerMessage: string,
+  npcId: string
+): { cleanedText: string; toolCall?: 'follow_player' | 'stop_following' | 'open_trade' } {
+  let toolCall: 'follow_player' | 'stop_following' | 'open_trade' | undefined;
+
+  // 1. Check explicit tool tags in LLM output
+  if (/\[TOOL:\s*follow_player\]/i.test(rawText)) {
+    toolCall = 'follow_player';
+  } else if (/\[TOOL:\s*stop_following\]/i.test(rawText)) {
+    toolCall = 'stop_following';
+  } else if (/\[TOOL:\s*open_trade\]/i.test(rawText)) {
+    toolCall = 'open_trade';
+  }
+
+  // 2. Fallback smart intent detection based on player request
+  if (!toolCall) {
+    const p = playerMessage.toLowerCase();
+    if (
+      p.includes('follow me') ||
+      p.includes('mere saath') ||
+      p.includes('chalo saath') ||
+      p.includes('piche aao') ||
+      p.includes('peeche aao') ||
+      p.includes('come with me')
+    ) {
+      toolCall = 'follow_player';
+    } else if (
+      p.includes('stop following') ||
+      p.includes('stay here') ||
+      p.includes('ruko yahan') ||
+      p.includes('ruko') ||
+      p.includes('wait here') ||
+      p.includes('mat aao')
+    ) {
+      toolCall = 'stop_following';
+    } else if (
+      (npcId === 'dev_shopkeeper' || npcId === 'arjun_mechanic') &&
+      (p.includes('trade') ||
+        p.includes('buy') ||
+        p.includes('sell') ||
+        p.includes('negotiate') ||
+        p.includes('kharid') ||
+        p.includes('bech') ||
+        p.includes('sauda') ||
+        p.includes('dukan') ||
+        p.includes('bhav') ||
+        p.includes('price'))
+    ) {
+      toolCall = 'open_trade';
+    }
+  }
+
+  // Remove the [TOOL: ...] tag so it's not spoken aloud by TTS or shown in raw subtitles
+  let cleaned = rawText.replace(/\[TOOL:\s*\w+\]/gi, '').trim();
+  return { cleanedText: cleaned, toolCall };
 }
 
 /**

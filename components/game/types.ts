@@ -73,4 +73,12 @@ export interface GameStateEvent {
   gameTimeMinutes?: number;
   npcs?: NPCWorldState[];
   selectedNpc?: NPCWorldState | null;
+  followingNpcId?: string | null;
+}
+
+export interface NPCToolCall {
+  tool: 'follow_player' | 'stop_following' | 'open_trade';
+  targetNpcId: string;
+  targetNpcName?: string;
+  details?: string;
 }

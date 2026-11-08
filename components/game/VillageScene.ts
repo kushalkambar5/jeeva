@@ -64,7 +64,7 @@ interface LiveNPCEntity {
   targetX: number;
   targetY: number;
   // Casual behavior state
-  behaviorState: 'idle' | 'wandering' | 'traveling' | 'talking';
+  behaviorState: 'idle' | 'wandering' | 'traveling' | 'talking' | 'following';
   idleWaitTimer: number; // in seconds
   facing: 'down' | 'left' | 'right' | 'up';
   interactionPoint: InteractionPoint;
@@ -98,6 +98,9 @@ export class VillageScene extends Phaser.Scene {
   private clockAccumulator = 0;
   private liveNPCs: Map<string, LiveNPCEntity> = new Map();
   private npcGroup!: Phaser.Physics.Arcade.Group;
+
+  // NPC Companion & Tool Following System
+  public followingNpcId: string | null = null;
 
   // Throttling State Broadcasts to prevent React re-render thrashing
   private lastBroadcastTime = 0;
@@ -891,6 +894,52 @@ export class VillageScene extends Phaser.Scene {
     this.cameras.main.pan(x, y + 24, 400, 'Sine.easeInOut');
   }
 
+  public commandFollowPlayer(npcId: string): boolean {
+    const liveNpc = this.liveNPCs.get(npcId);
+    if (!liveNpc) return false;
+
+    // If another NPC was following, revert that NPC to idle
+    if (this.followingNpcId && this.followingNpcId !== npcId) {
+      const prev = this.liveNPCs.get(this.followingNpcId);
+      if (prev) {
+        prev.behaviorState = 'idle';
+        prev.activityText.setText(prev.currentScheduleEntry.activity.replace(/_/g, ' '));
+        prev.activityText.setColor('#93C476');
+      }
+    }
+
+    this.followingNpcId = npcId;
+    liveNpc.behaviorState = 'following';
+    liveNpc.activityText.setText('🐾 Following You');
+    liveNpc.activityText.setColor('#F4D477');
+    sound.playInteractClick();
+    this.broadcastState(true);
+    return true;
+  }
+
+  public commandStopFollowing(npcId?: string): boolean {
+    const targetId = npcId || this.followingNpcId;
+    if (!targetId) return false;
+
+    const liveNpc = this.liveNPCs.get(targetId);
+    if (liveNpc) {
+      liveNpc.behaviorState = 'idle';
+      liveNpc.sprite.setVelocity(0, 0);
+      liveNpc.sprite.anims.stop();
+      liveNpc.activityText.setText(liveNpc.currentScheduleEntry.activity.replace(/_/g, ' '));
+      liveNpc.activityText.setColor('#93C476');
+    }
+
+    this.followingNpcId = null;
+    sound.playInteractClick();
+    this.broadcastState(true);
+    return true;
+  }
+
+  public getFollowingNpcId(): string | null {
+    return this.followingNpcId;
+  }
+
   public triggerActiveInteraction() {
     if (!this.activeInteraction || this.isTransitioning) return;
 
@@ -998,6 +1047,7 @@ export class VillageScene extends Phaser.Scene {
       gameTime: formatMinutesToTime(this.gameTimeMinutes),
       gameTimeMinutes: this.gameTimeMinutes,
       npcs: this.getNpcWorldStates(),
+      followingNpcId: this.followingNpcId,
     });
   }
 
@@ -1027,8 +1077,43 @@ export class VillageScene extends Phaser.Scene {
         liveNpc.sprite.y
       );
 
-      // If player is speaking / right next to NPC, NPC stops and politely faces player
-      if (distToPlayer <= 38) {
+      // 1. Tool Use: NPC is actively following player as a companion
+      if (liveNpc.data.id === this.followingNpcId || liveNpc.behaviorState === 'following') {
+        const dx = this.player.x - liveNpc.sprite.x;
+        const dy = this.player.y - liveNpc.sprite.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 48) {
+          const isSprinting = Boolean(
+            (this.wasd?.sprint && this.wasd.sprint.isDown) ||
+            (this.cursors?.shift && this.cursors.shift.isDown)
+          );
+          const followSpeed = isSprinting ? 140 : 92;
+          const vx = (dx / dist) * followSpeed;
+          const vy = (dy / dist) * followSpeed;
+          liveNpc.sprite.setVelocity(vx, vy);
+
+          const tex = liveNpc.data.sprite_key;
+          if (Math.abs(vx) > Math.abs(vy)) {
+            liveNpc.facing = vx > 0 ? 'right' : 'left';
+            liveNpc.sprite.anims.play(`${tex}-walk-${liveNpc.facing}`, true);
+          } else {
+            liveNpc.facing = vy > 0 ? 'down' : 'up';
+            liveNpc.sprite.anims.play(`${tex}-walk-${liveNpc.facing}`, true);
+          }
+        } else {
+          // Within companion range: stop smoothly and face player
+          liveNpc.sprite.setVelocity(0, 0);
+          liveNpc.sprite.anims.stop();
+          if (Math.abs(dx) > Math.abs(dy)) {
+            liveNpc.facing = dx > 0 ? 'right' : 'left';
+          } else {
+            liveNpc.facing = dy > 0 ? 'down' : 'up';
+          }
+          liveNpc.sprite.setFrame(getIdleFrameForFacing(liveNpc.data.sprite_key, liveNpc.facing));
+        }
+      } else if (distToPlayer <= 38) {
+        // If player is speaking / right next to NPC, NPC stops and politely faces player
         liveNpc.sprite.setVelocity(0, 0);
         liveNpc.sprite.anims.stop();
 

@@ -147,6 +147,14 @@ class SoundEngine {
       // Audio error
     }
   }
+
+  public playQuestAccept() {
+    this.playChime();
+  }
+
+  public playQuestComplete() {
+    this.playChestFanfare();
+  }
 }
 
 export const sound = new SoundEngine();

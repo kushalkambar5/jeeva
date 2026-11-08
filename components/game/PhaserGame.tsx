@@ -12,6 +12,9 @@ export interface PhaserGameRef {
   setGameTime: (minutes: number) => void;
   toggleClock: (running: boolean) => void;
   teleportTo: (x: number, y: number) => void;
+  followPlayer: (npcId: string) => boolean;
+  stopFollowing: (npcId?: string) => boolean;
+  getFollowingNpc: () => string | null;
 }
 
 interface PhaserGameProps {
@@ -74,6 +77,30 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(function Ph
       if (current?.teleportTo) {
         current.teleportTo(x, y);
       }
+    },
+    followPlayer: (npcId: string) => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.commandFollowPlayer) {
+        return current.commandFollowPlayer(npcId);
+      }
+      return false;
+    },
+    stopFollowing: (npcId?: string) => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.commandStopFollowing) {
+        return current.commandStopFollowing(npcId);
+      }
+      return false;
+    },
+    getFollowingNpc: () => {
+      const activeScenes = gameRef.current?.scene.getScenes(true) || [];
+      const current = activeScenes[0] as any;
+      if (current?.getFollowingNpcId) {
+        return current.getFollowingNpcId();
+      }
+      return null;
     },
   }));
 
