@@ -25,6 +25,7 @@ import {
   removeItemFromSlot,
   evaluateNegotiation,
   addDroppedItem,
+  getMerchantThresholdPrice,
 } from '@/lib/inventory';
 import PixelSprite from '../PixelSprite';
 import { sound } from './audio';
@@ -160,9 +161,13 @@ export function TradeNegotiationModal({
         textEnglish: outcome.merchantReplyEnglish,
         status: 'compromise',
       });
+      const threshold = getMerchantThresholdPrice(merchantId, selectedItem);
+      const isFloor = outcome.counterOffer === threshold;
       setFeedback({
         type: 'error',
-        message: `Counter-offer: Merchant agrees to drop price to ₹${outcome.counterOffer}.`,
+        message: isFloor
+          ? `Threshold floor reached: ${merchantName} says: "${outcome.merchantReplyEnglish}"`
+          : `Counter-offer: Merchant agrees to drop price to ₹${outcome.counterOffer}.`,
       });
       sound.playInteractClick();
     } else {
@@ -472,6 +477,15 @@ export function TradeNegotiationModal({
                       </span>
                     </div>
 
+                    <div className="text-center px-2.5 py-1 rounded bg-[#0F1712] border border-[#28392E]">
+                      <span className="text-[9px] font-mono text-stone-400 block uppercase">
+                        Threshold Floor:
+                      </span>
+                      <span className="text-xs font-mono font-bold text-[#93C476]">
+                        ₹{getMerchantThresholdPrice(merchantId, selectedItem)}
+                      </span>
+                    </div>
+
                     <div className="text-right">
                       <span className="text-[10px] font-mono text-stone-400 block">Your Funds:</span>
                       <span className="text-sm font-mono font-bold text-[#FFF8E9]">
@@ -501,6 +515,13 @@ export function TradeNegotiationModal({
                       onChange={(e) => setPlayerOffer(parseInt(e.target.value, 10))}
                       className="w-full h-1.5 bg-[#0F1712] accent-[#F4D477] rounded cursor-pointer"
                     />
+
+                    {playerOffer < getMerchantThresholdPrice(merchantId, selectedItem) && (
+                      <div className="text-[10px] font-mono text-[#F87171] bg-red-950/60 px-2 py-1 rounded border border-red-800/40 flex items-center gap-1.5">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        <span>Below threshold minimum (₹{getMerchantThresholdPrice(merchantId, selectedItem)}). Merchant will refuse!</span>
+                      </div>
+                    )}
 
                     {/* Bargaining Tactics Buttons */}
                     <div className="space-y-1">

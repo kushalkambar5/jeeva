@@ -22,6 +22,7 @@ import {
   Mic,
   AlertTriangle,
   Loader2,
+  ShoppingBag,
 } from 'lucide-react';
 import { PhaserGame, PhaserGameRef } from './PhaserGame';
 import { GameStateEvent, InteractionPoint, NPCWorldState } from './types';
@@ -30,6 +31,7 @@ import PixelSprite from '../PixelSprite';
 import { formatMinutesToTime } from './npcData';
 import { WavRecorder } from '@/lib/wavRecorder';
 import { MinecraftInventoryModal, MinecraftHotbar } from './MinecraftInventoryModal';
+import { TradeNegotiationModal } from './TradeNegotiationModal';
 import {
   loadPlayerInventory,
   removeItemFromSlot,
@@ -37,6 +39,7 @@ import {
   loadPlayerWallet,
   savePlayerWallet,
   getCatalogItem,
+  getMerchantThresholdPrice,
 } from '@/lib/inventory';
 import { setNpcLocation, resetNpcLocation } from '@/lib/npcLocations';
 
@@ -110,6 +113,14 @@ export default function GameTestingCanvas() {
     name: string;
   } | null>(null);
   const [toolToast, setToolToast] = useState<string | null>(null);
+
+  // Shopkeeper & Mechanic Trade Negotiation Workbench Modal State
+  const [tradeModalMerchant, setTradeModalMerchant] = useState<{
+    id: 'dev_shopkeeper' | 'arjun_mechanic';
+    name: string;
+    role?: string;
+    spriteSrc?: string;
+  } | null>(null);
 
   const handleStateChange = useCallback((event: GameStateEvent) => {
     setGameState((prev) => {
@@ -393,6 +404,17 @@ export default function GameTestingCanvas() {
           setToolToast(`🏡 ${data.npcName || targetNpc.name} is heading back home.`);
           setTimeout(() => setToolToast(null), 4000);
           sound.playInteractClick();
+        } else if (data.toolCall.tool === 'open_trade') {
+          const targetId = data.toolCall.targetNpcId || targetNpc.id;
+          if (targetId === 'dev_shopkeeper' || targetId === 'arjun_mechanic') {
+            setTradeModalMerchant({
+              id: targetId as 'dev_shopkeeper' | 'arjun_mechanic',
+              name: data.npcName || targetNpc.name,
+              role: data.npcRole || targetNpc.activityLabel,
+              spriteSrc: targetNpc.spriteSrc,
+            });
+            sound.playInteractClick();
+          }
         } else if (data.toolCall.tool === 'trade_deal') {
           const { itemId, price, itemName, quantity } = data.toolCall;
           const qty = typeof quantity === 'number' && quantity > 0 ? quantity : 1;
@@ -400,6 +422,20 @@ export default function GameTestingCanvas() {
           const itemCatalog = itemId ? getCatalogItem(itemId) : undefined;
           const resolvedName = itemName || itemCatalog?.name || 'Item';
           const finalPrice = typeof price === 'number' && price > 0 ? price : ((itemCatalog?.basePrice ?? 0) * qty);
+
+          // Threshold validation safety check
+          const isDevOrArjun = targetNpc.id === 'dev_shopkeeper' || targetNpc.id === 'arjun_mechanic';
+          const minThresholdUnit = (isDevOrArjun && itemCatalog)
+            ? getMerchantThresholdPrice(targetNpc.id as 'dev_shopkeeper' | 'arjun_mechanic', itemCatalog)
+            : 0;
+          const totalMinThreshold = minThresholdUnit * qty;
+
+          if (finalPrice < totalMinThreshold) {
+            sound.playDamageHurt();
+            setToolToast(`⚠️ Deal refused: ${targetNpc.name} can only reduce the cost till ₹${totalMinThreshold} price.`);
+            setTimeout(() => setToolToast(null), 5000);
+            return;
+          }
 
           if (currentWallet < finalPrice) {
             sound.playDamageHurt();
@@ -549,6 +585,17 @@ export default function GameTestingCanvas() {
           setToolToast(`🏡 ${data.npcName || targetNpc.name} is heading back home.`);
           setTimeout(() => setToolToast(null), 4000);
           sound.playInteractClick();
+        } else if (data.toolCall.tool === 'open_trade') {
+          const targetId = data.toolCall.targetNpcId || targetNpc.id;
+          if (targetId === 'dev_shopkeeper' || targetId === 'arjun_mechanic') {
+            setTradeModalMerchant({
+              id: targetId as 'dev_shopkeeper' | 'arjun_mechanic',
+              name: data.npcName || targetNpc.name,
+              role: data.npcRole || targetNpc.activityLabel,
+              spriteSrc: targetNpc.spriteSrc,
+            });
+            sound.playInteractClick();
+          }
         } else if (data.toolCall.tool === 'trade_deal') {
           const { itemId, price, itemName, quantity } = data.toolCall;
           const qty = typeof quantity === 'number' && quantity > 0 ? quantity : 1;
@@ -556,6 +603,20 @@ export default function GameTestingCanvas() {
           const itemCatalog = itemId ? getCatalogItem(itemId) : undefined;
           const resolvedName = itemName || itemCatalog?.name || 'Item';
           const finalPrice = typeof price === 'number' && price > 0 ? price : ((itemCatalog?.basePrice ?? 0) * qty);
+
+          // Threshold validation safety check
+          const isDevOrArjun = targetNpc.id === 'dev_shopkeeper' || targetNpc.id === 'arjun_mechanic';
+          const minThresholdUnit = (isDevOrArjun && itemCatalog)
+            ? getMerchantThresholdPrice(targetNpc.id as 'dev_shopkeeper' | 'arjun_mechanic', itemCatalog)
+            : 0;
+          const totalMinThreshold = minThresholdUnit * qty;
+
+          if (finalPrice < totalMinThreshold) {
+            sound.playDamageHurt();
+            setToolToast(`⚠️ Deal refused: ${targetNpc.name} can only reduce the cost till ₹${totalMinThreshold} price.`);
+            setTimeout(() => setToolToast(null), 5000);
+            return;
+          }
 
           if (currentWallet < finalPrice) {
             sound.playDamageHurt();
@@ -1347,6 +1408,26 @@ export default function GameTestingCanvas() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {(inspectModal.npcData.id === 'dev_shopkeeper' || inspectModal.npcData.id === 'arjun_mechanic') && (
+                    <button
+                      onClick={() => {
+                        const npc = inspectModal.npcData!;
+                        setTradeModalMerchant({
+                          id: npc.id as 'dev_shopkeeper' | 'arjun_mechanic',
+                          name: npc.name,
+                          role: npc.role,
+                          spriteSrc: npc.spriteSrc,
+                        });
+                        setInspectModal(null);
+                        sound.playInteractClick();
+                      }}
+                      className="px-3 py-1.5 bg-[#315B3C] hover:bg-[#437A51] border border-[#78A85B] text-[#F4D477] font-pixel text-xs font-bold rounded shadow transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5 text-[#F4D477]" />
+                      <span>Trade & Haggle</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => {
                       if (inspectModal.npcData) {
@@ -1680,6 +1761,21 @@ export default function GameTestingCanvas() {
         selectedHotbarIndex={selectedHotbarIndex}
         onSelectHotbarIndex={(idx) => setSelectedHotbarIndex(idx)}
       />
+
+      {/* 10. SHOPKEEPER & MECHANIC TRADE NEGOTIATION WORKBENCH MODAL */}
+      {tradeModalMerchant && (
+        <TradeNegotiationModal
+          isOpen={Boolean(tradeModalMerchant)}
+          onClose={() => setTradeModalMerchant(null)}
+          merchantId={tradeModalMerchant.id}
+          merchantName={tradeModalMerchant.name}
+          merchantRole={tradeModalMerchant.role}
+          merchantSpriteSrc={tradeModalMerchant.spriteSrc}
+          playerX={gameState.playerX}
+          playerY={gameState.playerY}
+          currentScene={gameState.isInsideInterior ? (gameState.interiorId || 'shop') : 'village'}
+        />
+      )}
     </div>
   );
 }

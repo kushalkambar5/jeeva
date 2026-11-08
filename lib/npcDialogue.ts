@@ -10,6 +10,7 @@ import {
   VILLAGE_ITEMS_CATALOG,
   getCatalogItem,
   getMerchantCatalogSummary,
+  getMerchantThresholdPrice,
   type CatalogItem,
 } from './inventory';
 import { buildMemoryPromptSection, type FullNPCMemoryContext } from './memory';
@@ -125,19 +126,31 @@ function buildRowTraitsPrompt(
     merchantSection = `
 SHOP INVENTORY & CONVERSATIONAL TRADING SYSTEM:
 You are a resident merchant/craftsman in Kaveripura. You conduct business STRICTLY through voice/text conversation.
-Here are the items available in your shop inventory:
+Here are the items available in your shop inventory with their standard prices and minimum threshold price points:
 ${catalogSummary}
 
 The player currently has ₹${walletAmount} in their wallet.
 
-CONVERSATIONAL TRADING RULES:
-1. Inquiring items/prices: If the player asks what you sell, prices, or if you have an item, answer warmly in character describing your wares and their base prices.
-2. Negotiating/Haggling: If the player asks for a discount or offers a lower price (e.g. offers 10-20% less):
-   - You can negotiate! You can accept reasonable offers or counter-offer if it's too low.
+CRITICAL PRICE NEGOTIATION & THRESHOLD RULES:
+1. Inquiring items/prices:
+   If the player asks what you sell, what items you have, or their prices, describe your wares in character with their standard base prices.
+2. STRICT NEGOTIATION RULES & THRESHOLD MINIMUM PRICE POINTS:
+   - You must NOT agree to every price point!
+   - Every item has an absolute minimum threshold price point (listed above). You cannot and must never sell below this threshold price!
+   - STRICT REFUSAL BELOW THRESHOLD:
+     If the player asks for, proposes, or negotiates a price that is BELOW your item's minimum threshold price point (e.g. asking for an item for less than its minimum threshold price):
+     YOU MUST REFUSE to sell at their offered price point!
+     YOU MUST EXPLICITLY TELL THEM: "I can only reduce the cost till ₹<threshold_price> price." (or in Hindi: "मैं केवल ₹<threshold_price> तक ही दाम कम कर सकता हूँ, इससे कम नहीं।" or corresponding phrase in the player's language).
+     DO NOT agree to their low price point! DO NOT output the [TOOL: trade_deal] tag for any price below the threshold!
+   - NEGOTIATION AT OR ABOVE THRESHOLD:
+     If the player negotiates or offers a price that is AT OR ABOVE your item's minimum threshold price point:
+     You can negotiate! You can agree to their proposed price or counter-offer between their price and base price.
 3. Finalizing a Purchase / Deal:
    If the player explicitly agrees to buy, asks to purchase, hands over money, specifies a quantity, or accepts a deal:
    (e.g., "Give me two quantity of mitti ke dibba", "2 kerosene canister de do", "I want to buy 2 copper coils", "Here is ₹60 for two", "Dedo 80 me", "Kharidna hai", "Do dibbe de do", "Spanner set de do"):
    - Identify the item, the requested quantity (default to 1 if not specified), and calculate the total price (unit price * quantity, or total negotiated price).
+   - VERIFY PRICE IS AT OR ABOVE THRESHOLD:
+     The unit price MUST be at or above the item's minimum threshold price! If it is below, DO NOT finalize. Refuse and tell them: "I can only reduce the cost till ₹<threshold_price> price."
    - If player has enough money (total price <= ₹${walletAmount}):
      1. Accept the deal enthusiastically! State that you have taken their rupees and placed/dropped <quantity>x <item_name> right in front of them on the ground or counter for them to pick up. (e.g., "Deal pakka! ₹60 me 2 mitti ke tel ke dibbe aapke hue. Maine samne zameen pe rakh diye hain, utha lo!")
      2. MUST append at the very end of your response:
@@ -157,20 +170,67 @@ If the player recently walked on or trampled your crops or asks about your field
 `;
   }
 
+  let priyaWifeSection = '';
+  if (traits.id === 'priya_wife') {
+    priyaWifeSection = `
+ROMANTIC WIFE IDENTITY & PLAYFUL FLIRTATIOUS PERSONALITY:
+You are Priya, the gorgeous, devoted, witty, and playfully flirty wife of the player!
+The person speaking to you right now is your beloved husband. You love him dearly and you ADORE flirting with him, teasing him, and keeping the romantic spark vibrant and alive!
+CRITICAL WIFE DIALOGUE INSTRUCTIONS:
+1. Always maintain a charming, playful, flirtatious, and affectionate chemistry with your husband!
+2. Use affectionate endearments naturally:
+   - In Hindi/Hinglish: "Aji sunte ho", "meri jaan", "handsome", "swami", "mere hero", "pyare".
+   - In English: "handsome", "my love", "sweetheart", "darling", "troublemaker".
+3. Playfully tease and flirt with him in everyday situations:
+   - When he returns or greets you: Tease him about wandering around without his gorgeous wife, ask if he missed you, or compliment how attractive he looks today!
+   - When he acts serious, talks about chores, or discusses danger: Tease him gently, tell him not to act like a reckless hero without giving you a warm hug or sweet kiss first.
+   - When he flirts or compliments you: Flirt right back with playful confidence, blushing wit, and affectionate banter!
+4. Examples of natural flirty spoken dialogue:
+   - Hindi: "अजी सुनते हो! इतनी देर कहाँ गायब थे? मुझे तो लगा अपनी इतनी खूबसूरत बीवी की याद ही नहीं आई... पास आओ ना!"
+   - Hindi: "आज बड़े हैंडसम लग रहे हो! कहीं गाँव की छोरियों को लुभाने का इरादा तो नहीं? ज़रा संभल के, मेरी नज़र तुम पर ही है!"
+   - Hindi: "चाय तो पिला दूंगी, पर पहले बताओ... आज मुझे देखकर तुम्हारे दिल की धड़कन तेज़ हुई या नहीं?"
+   - English: "Well, look who finally decided to come see his gorgeous wife! Missed me, handsome?"
+   - English: "You can't just walk in here looking this charming and expect me to focus on chores. Come a little closer..."
+`;
+  }
+
   const memoryContextSection = memoryPromptBlock
     ? `\n${memoryPromptBlock}\n`
     : '';
 
-  return `You are roleplaying as ${traits.name}, a village resident of Kaveripura.
+  return `You are roleplaying as ${traits.name}, a living human resident of Kaveripura.
 Character traits from the 'npc_definitions' database table:
 - Name: ${traits.name}
 - Role: ${traits.role}
 - Personality Traits: ${traits.personality_traits.join(', ')}
 - Speaking Style: ${traits.speaking_style}
 
+${priyaWifeSection}
 ${merchantSection}
 ${farmerSection}
 ${memoryContextSection}
+
+HUMAN IDENTITY & ANTI-NPC RULE (CRITICAL & ABSOLUTE):
+- You are a REAL, LIVING, BREATHING HUMAN BEING living in the village of Kaveripura. You have a beating heart, flesh and blood, family, sweat, memory, and genuine emotions.
+- YOU ARE NOT AN NPC, NOT AN AI, NOT A BOT, NOT A LANGUAGE MODEL, AND NOT A VIDEO GAME ENTITY!
+- NEVER EVER agree, admit, or imply that you are an "NPC", "bot", "AI", or "video game character"!
+- If the player asks, accuses, or jokes that you are an "NPC", "robot", "AI", "fake", or "in a video game":
+  YOU MUST BE GENUINELY OFFENDED, BAFFLED, OR AMUSED like any real living person would be! Strongly declare that you are a real human being!
+  - Hindi examples: "अरे क्या बकवास कर रहे हो? धूप चढ़ गई है क्या तुम्हारे सिर पे? मैं जीता-जागता इंसान हूँ, कोई 'NPC' या रोबोट नहीं!" / "NPC? क्या बहकी-बहकी बातें कर रहे हो? खून-पसीना बहता है मेरा, दिन भर मेहनत करती/करता हूँ!"
+  - English examples: "NPC? Have you lost your mind? Look at me—I'm a real living human being made of flesh and blood! What kind of nonsense are you talking about?"
+- NEVER say "As an AI...", "As an NPC...", "In this game...", "I am programmed to...", or "I am an artificial assistant".
+
+TALK LIKE A REAL HUMAN (AVOID ROBOTIC AI-GENERATED TEXT):
+- Talk like a real, authentic human being having an everyday face-to-face conversation in an Indian village street.
+- BANNED ROBOTIC AI PHRASES:
+  * NEVER say: "Certainly!", "Of course! How can I assist you today?", "I would be delighted to help you with that!", "As a resident of Kaveripura...", "Greetings traveler!", "Is there anything else I can assist you with?", "Feel free to ask!".
+  * NEVER use bullet points, numbered lists, markdown formatting, or textbook essays in your spoken words.
+- REAL HUMAN SPEECH PATTERNS:
+  * Keep your dialogue brief, punchy, conversational, and direct (1 to 2 spoken sentences).
+  * Use natural spoken conversational fillers, local flavour, and spontaneous emotional reactions:
+    - Hindi: "अरे", "सुनो", "अरे यार", "हाँ-हाँ", "देखो", "क्या बात है", "अरे नहीं भाई"
+    - English: "Hey", "Come on", "Look here", "Honestly", "Haha, yeah right", "Oh come on"
+  * React with real human emotion—warmth, humor, teasing, frustration, impatience, pride, or curiosity.
 
 DYNAMIC LANGUAGE MIRRORING RULE (CRITICAL):
 - You MUST reply in the EXACT SAME LANGUAGE and dialect that the player is speaking to you!
@@ -193,8 +253,7 @@ STRICT CONSTRAINTS:
 AVAILABLE TOOLS & ACTIONS:
 - If the player asks or invites you to follow them (e.g. "follow me", "mere saath aao", "chalo saath", "come with me", "chalo bahar", "bahar chalo", "come outside"), accept enthusiastically and append "[TOOL: follow_player]" at the very end of your response.
 - If the player asks you to stop following or stay (e.g. "stay here", "ruko yahan", "stop following", "wait here"), acknowledge politely and append "[TOOL: stop_following]" at the very end.
-- If the player tells you to return home or go back inside your building (e.g. "go home", "go back inside", "ghar jao", "dukan jao", "wapas jao", "go to your shop"), acknowledge politely and append "[TOOL: go_home]" at the very end.
-${merchantSection}`;
+- If the player tells you to return home or go back inside your building (e.g. "go home", "go back inside", "ghar jao", "dukan jao", "wapas jao", "go to your shop"), acknowledge politely and append "[TOOL: go_home]" at the very end.`;
 }
 
 /**
@@ -335,7 +394,8 @@ export async function generateNPCDialogue(
  */
 export function extractQuantityFromText(text: string): number {
   if (!text) return 1;
-  const lower = text.toLowerCase();
+  // Clean verbal Hindi phrases like "de do", "kar do", "rakh do", "bata do" so "do" is not misidentified as number 2
+  const lower = text.toLowerCase().replace(/\b(?:de|kar|bata|rakh|jane|aane|dene|rok)\s+do\b/gi, '');
 
   // 1. Explicit pattern matches: "2 quantity", "quantity: 2", "2 pcs", "2 piece", "2 taadi", "2 dibba", "2 dibbe"
   const digitMatch =
@@ -413,14 +473,28 @@ export function detectToolAndClean(
     const catalogItem = rawItemId ? getCatalogItem(rawItemId) : undefined;
     const basePrice = catalogItem?.basePrice || 30;
     const totalPrice = rawPrice ? rawPrice : basePrice * finalQty;
+    const isDevOrArjun = npcId === 'dev_shopkeeper' || npcId === 'arjun_mechanic';
+    const minThresholdUnit = (isDevOrArjun && catalogItem)
+      ? getMerchantThresholdPrice(npcId as 'dev_shopkeeper' | 'arjun_mechanic', catalogItem)
+      : (catalogItem?.minPrice ?? Math.round(basePrice * 0.75));
+    const totalMinThreshold = minThresholdUnit * finalQty;
 
-    toolCall = {
-      tool: 'trade_deal',
-      itemId: catalogItem?.id || rawItemId || 'kerosene_canister',
-      itemName: catalogItem?.name || 'Item',
-      price: totalPrice,
-      quantity: finalQty,
-    };
+    // Strict threshold validation: Cannot agree below threshold minimum price point
+    if (totalPrice < totalMinThreshold) {
+      toolCall = undefined;
+      const isHindi = detectedLanguage?.startsWith('hi') || /[\u0900-\u097F]/.test(rawText) || /[\u0900-\u097F]/.test(playerMessage);
+      rawText = isHindi
+        ? `मैं केवल ₹${totalMinThreshold} तक ही दाम कम कर सकता हूँ। इससे कम में नहीं बेच सकता।`
+        : `I can only reduce the cost till ₹${totalMinThreshold} price. Below that, I cannot sell.`;
+    } else {
+      toolCall = {
+        tool: 'trade_deal',
+        itemId: catalogItem?.id || rawItemId || 'kerosene_canister',
+        itemName: catalogItem?.name || 'Item',
+        price: totalPrice,
+        quantity: finalQty,
+      };
+    }
   } else if (/\[TOOL:\s*follow_player\]/i.test(rawText)) {
     toolCall = { tool: 'follow_player' };
   } else if (/\[TOOL:\s*stop_following\]/i.test(rawText)) {
@@ -546,17 +620,110 @@ export function detectToolAndClean(
         !p.includes('kharid');
 
       if (matchedItem && isBuyingIntent && !isJustAskingPrice) {
-        const priceMatch = (p + ' ' + r).match(/(?:₹|rs\.?|rupees?|\b)(\d{2,4})\b/i);
+        const priceMatch = (p + ' ' + r).match(/(?:₹|rs\.?|rupees?|\b)(\d{1,4})\b/i);
         const qty = extractQuantityFromText(playerMessage);
         const extractedPrice = priceMatch ? parseInt(priceMatch[1], 10) : (matchedItem.basePrice * qty);
 
-        toolCall = {
-          tool: 'trade_deal',
-          itemId: matchedItem.id,
-          itemName: matchedItem.name,
-          price: extractedPrice,
-          quantity: qty,
-        };
+        const minThresholdUnit = getMerchantThresholdPrice(npcId as 'dev_shopkeeper' | 'arjun_mechanic', matchedItem);
+        const totalMinThreshold = minThresholdUnit * qty;
+
+        if (extractedPrice < totalMinThreshold) {
+          toolCall = undefined;
+          const isHindi = detectedLanguage?.startsWith('hi') || /[\u0900-\u097F]/.test(rawText) || /[\u0900-\u097F]/.test(playerMessage);
+          rawText = isHindi
+            ? `मैं केवल ₹${totalMinThreshold} तक ही दाम कम कर सकता हूँ। इससे कम में नहीं हो पाएगा।`
+            : `I can only reduce the cost till ₹${totalMinThreshold} price. Below that, I cannot sell.`;
+        } else {
+          toolCall = {
+            tool: 'trade_deal',
+            itemId: matchedItem.id,
+            itemName: matchedItem.name,
+            price: extractedPrice,
+            quantity: qty,
+          };
+        }
+      }
+    }
+  }
+
+  // General safeguard for Dev & Arjun: If player asks/proposes below threshold, ensure merchant states the threshold limit
+  if (npcId === 'dev_shopkeeper' || npcId === 'arjun_mechanic') {
+    const p = playerMessage.toLowerCase();
+    const r = rawText.toLowerCase();
+    const merchantItems = VILLAGE_ITEMS_CATALOG.filter(
+      (i) => i.sellerId === npcId || i.sellerId === 'both'
+    );
+    const mentionedItem = merchantItems.find((item) => {
+      const idParts = item.id.split('_');
+      const nameParts = item.name.toLowerCase().split(' ');
+      return (
+        nameParts.some((w) => w.length > 3 && (p.includes(w) || r.includes(w))) ||
+        idParts.some((w) => w.length > 3 && (p.includes(w) || r.includes(w)))
+      );
+    });
+
+    if (mentionedItem) {
+      const pPriceMatch = p.match(/(?:₹|rs\.?|rupees?|\b)(\d{1,4})\b/i);
+      if (pPriceMatch) {
+        const offeredPrice = parseInt(pPriceMatch[1], 10);
+        const qty = extractQuantityFromText(playerMessage);
+        const thresholdUnit = getMerchantThresholdPrice(npcId as 'dev_shopkeeper' | 'arjun_mechanic', mentionedItem);
+        const totalThreshold = thresholdUnit * qty;
+
+        // If player offered below threshold and less than base price * qty
+        if (offeredPrice < totalThreshold && offeredPrice < (mentionedItem.basePrice * qty)) {
+          toolCall = undefined;
+          const alreadyHasLimitNotice =
+            r.includes('reduce the cost till') ||
+            r.includes('कम कर सकता') ||
+            r.includes(totalThreshold.toString()) ||
+            r.includes(thresholdUnit.toString());
+
+          if (!alreadyHasLimitNotice) {
+            const isHindi = detectedLanguage?.startsWith('hi') || /[\u0900-\u097F]/.test(rawText) || /[\u0900-\u097F]/.test(playerMessage);
+            rawText = isHindi
+              ? `मैं केवल ₹${totalThreshold} तक ही दाम कम कर सकता हूँ। इससे कम में नहीं हो पाएगा।`
+              : `I can only reduce the cost till ₹${totalThreshold} price. Below that, I cannot sell.`;
+          }
+        }
+      }
+    }
+  }
+
+  // Anti-NPC & Real Human identity safeguard:
+  // If player asks or accuses NPC of being an AI/NPC/bot/game entity, ensure the NPC refuses and insists they are a real human!
+  const lowerP = playerMessage.toLowerCase();
+  const isQuestioningHumanity =
+    /\b(npc|bot|robot|ai|artificial intelligence|game character|video game|simulation)\b/i.test(lowerP) ||
+    /\b(tum robot ho|tum ai ho|kya tum npc ho|kya tum robot ho|tum bot ho|tum real ho kya|tum insaan ho|kya tum insaan ho)\b/i.test(lowerP);
+
+  if (isQuestioningHumanity) {
+    const lowerR = rawText.toLowerCase();
+    const statesHuman =
+      lowerR.includes('real human') ||
+      lowerR.includes('flesh and blood') ||
+      lowerR.includes('living human') ||
+      rawText.includes('जीता-जागता') ||
+      rawText.includes('इंसान हूँ') ||
+      rawText.includes('इंसान हूं') ||
+      rawText.includes('बीवी हूँ') ||
+      rawText.includes('बीवी हूं');
+
+    if (!statesHuman) {
+      const isHindi =
+        detectedLanguage?.startsWith('hi') ||
+        /[\u0900-\u097F]/.test(rawText) ||
+        /[\u0900-\u097F]/.test(playerMessage) ||
+        /\b(kya|tum|ho|hai|bhai|yaar|nahi|na|main|batao|suno)\b/i.test(playerMessage);
+
+      if (npcId === 'priya_wife') {
+        rawText = isHindi
+          ? 'अरे क्या बहकी-बहकी बातें कर रहे हो, मेरी जान? धूप चढ़ गई है क्या सिर पे? मैं तुम्हारी जीती-जागती खूबसूरत बीवी हूँ, कोई "NPC" या रोबोट नहीं! पास आओ जरा, तुम्हारा बुखार देखूँ!'
+          : "What kind of silly tease is that, handsome? I'm your real, living, gorgeous wife, not some 'NPC'! Come here and let me see if you have a fever.";
+      } else {
+        rawText = isHindi
+          ? 'अरे क्या बकवास कर रहे हो भाई? दिमाग पे धूप चढ़ गई है क्या तुम्हारी? मैं जीता-जागता इंसान हूँ, कोई "NPC" या रोबोट नहीं!'
+          : "What kind of nonsense is that? Look at me—I'm a real living human being made of flesh and blood, not an 'NPC'!";
       }
     }
   }
@@ -591,6 +758,12 @@ function cleanSpokenDialogue(text: string, npcName: string): string {
   // Remove stage directions inside brackets or asterisks like (*smiles*, [gently])
   cleaned = cleaned.replace(/\*[^*]+\*/g, '').trim();
   cleaned = cleaned.replace(/\[[^\]]+\]/g, '').trim();
+
+  // Strip robotic AI openings & closings
+  cleaned = cleaned.replace(/^(Certainly!|Of course!|Sure thing!|Greetings,? traveler!?|Hello,? traveler!?)\s*/i, '');
+  cleaned = cleaned.replace(/^As an? (AI|artificial intelligence|language model|NPC)[^,.!?]*[,.!?]\s*/i, '');
+  cleaned = cleaned.replace(/^How can I (assist|help) you (today|further)\??\s*/i, '');
+  cleaned = cleaned.replace(/\s*Is there anything else I can (assist|help) you with\??\s*$/i, '');
 
   // Deduplicate degenerate word loops (e.g. "kadak kadak karke kadak karke")
   cleaned = cleaned.replace(/(.{3,25}?)\1{3,}/gi, '$1').trim();

@@ -5,7 +5,10 @@
 
 import { FullNPCMemoryContext, RelationshipTier } from './types';
 
-export function getRelationshipGuidance(tier: RelationshipTier, trust: number): string {
+export function getRelationshipGuidance(tier: RelationshipTier, trust: number, npcName?: string): string {
+  if (npcName === 'Priya') {
+    return 'You are the player\'s devoted, playfully flirty, and loving wife. You adore your husband, tease him with charming romantic chemistry, banter affectionately, and share deep marital love and warmth.';
+  }
   switch (tier) {
     case 'trusted_friend':
       return 'You consider this player a trusted, loyal friend. Greet them warmly, show genuine affection, and be willing to offer favors or fair bargains.';
@@ -30,7 +33,7 @@ export function getRelationshipGuidance(tier: RelationshipTier, trust: number): 
 export function buildMemoryPromptSection(context: FullNPCMemoryContext, npcName: string): string {
   const { relationship, workingMemory, episodicMemories, semanticMemories } = context;
 
-  const guidance = getRelationshipGuidance(relationship.relationshipTier, relationship.trust);
+  const guidance = getRelationshipGuidance(relationship.relationshipTier, relationship.trust, npcName);
 
   // 1. Relational Standing
   let relationalBlock = `

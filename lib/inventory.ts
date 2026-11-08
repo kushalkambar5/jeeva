@@ -10,6 +10,7 @@ export interface CatalogItem {
   category: 'mechanical' | 'tool' | 'electrical' | 'resource' | 'quest' | 'utility';
   description: string;
   basePrice: number;
+  minPrice?: number; // Strict threshold minimum price point
   sellerId: 'dev_shopkeeper' | 'arjun_mechanic' | 'both';
   icon: string; // Emoji / Icon identifier
   iconColor: string;
@@ -29,6 +30,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'electrical',
     description: 'High-conductivity pure copper coil required for life-support generators and high-voltage circuitry.',
     basePrice: 90,
+    minPrice: 70,
     sellerId: 'dev_shopkeeper',
     icon: '⚡',
     iconColor: '#F59E0B',
@@ -43,6 +45,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'tool',
     description: 'Forged chrome-vanadium spanners, socket wrenches, and pliers for workshop machinery.',
     basePrice: 75,
+    minPrice: 60,
     sellerId: 'arjun_mechanic',
     icon: '🔧',
     iconColor: '#60A5FA',
@@ -57,6 +60,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'electrical',
     description: 'Flexible rubber-sheathed copper wire for repairing transformers and house wiring.',
     basePrice: 35,
+    minPrice: 28,
     sellerId: 'arjun_mechanic',
     icon: '🪢',
     iconColor: '#F97316',
@@ -71,6 +75,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'tool',
     description: 'Electric soldering iron with rosin-core solder spool for delicate electrical repair.',
     basePrice: 65,
+    minPrice: 52,
     sellerId: 'arjun_mechanic',
     icon: '🪄',
     iconColor: '#FBBF24',
@@ -85,6 +90,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'mechanical',
     description: 'Interlocking machined brass gears salvaged from irrigation pumps and clockworks.',
     basePrice: 40,
+    minPrice: 32,
     sellerId: 'arjun_mechanic',
     icon: '⚙️',
     iconColor: '#EAB308',
@@ -99,6 +105,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'mechanical',
     description: 'High-tensile threaded bolts, hex nuts, and lock washers for heavy assembly.',
     basePrice: 20,
+    minPrice: 16,
     sellerId: 'arjun_mechanic',
     icon: '🔩',
     iconColor: '#94A3B8',
@@ -113,6 +120,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'mechanical',
     description: 'Sturdy galvanized tin and steel sheet for patching machine casings or shelter roofs.',
     basePrice: 30,
+    minPrice: 24,
     sellerId: 'arjun_mechanic',
     icon: '🛡️',
     iconColor: '#CBD5E1',
@@ -127,6 +135,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'resource',
     description: 'Refined fuel canister used for lighting hurricane lanterns and starting diesel pumps.',
     basePrice: 30,
+    minPrice: 22,
     sellerId: 'dev_shopkeeper',
     icon: '🛢️',
     iconColor: '#EF4444',
@@ -141,6 +150,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'utility',
     description: 'Wind-resistant brass and glass oil lantern that cuts through heavy monsoon night mists.',
     basePrice: 45,
+    minPrice: 35,
     sellerId: 'dev_shopkeeper',
     icon: '🏮',
     iconColor: '#F59E0B',
@@ -155,6 +165,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'resource',
     description: 'Mineral-rich coarse salt bag from the western hills used for seasoning and preserving.',
     basePrice: 15,
+    minPrice: 11,
     sellerId: 'dev_shopkeeper',
     icon: '🧂',
     iconColor: '#E2E8F0',
@@ -169,6 +180,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'resource',
     description: 'Sun-dried golden grain harvested from Ravi’s farm, ready for stone grinding.',
     basePrice: 25,
+    minPrice: 18,
     sellerId: 'dev_shopkeeper',
     icon: '🌾',
     iconColor: '#D97706',
@@ -183,6 +195,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'utility',
     description: 'Boiled and sanitized woven cotton gauze rolls for dressing cuts and burns.',
     basePrice: 22,
+    minPrice: 16,
     sellerId: 'dev_shopkeeper',
     icon: '🩹',
     iconColor: '#F87171',
@@ -197,6 +210,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'utility',
     description: 'Potent soothing antiseptic ointment prepared with cold-pressed neem oil and wild turmeric.',
     basePrice: 38,
+    minPrice: 28,
     sellerId: 'dev_shopkeeper',
     icon: '🧪',
     iconColor: '#10B981',
@@ -211,6 +225,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'utility',
     description: 'Pocket-sized jeweled compass that always points toward magnetic north across the valley.',
     basePrice: 60,
+    minPrice: 45,
     sellerId: 'both',
     icon: '🧭',
     iconColor: '#38BDF8',
@@ -225,6 +240,7 @@ export const VILLAGE_ITEMS_CATALOG: CatalogItem[] = [
     category: 'utility',
     description: 'Durable wax-coated canvas satchel with reinforced brass buckles for field expeditions.',
     basePrice: 50,
+    minPrice: 38,
     sellerId: 'dev_shopkeeper',
     icon: '🎒',
     iconColor: '#A855F7',
@@ -431,15 +447,30 @@ export function getMerchantItems(merchantId: 'dev_shopkeeper' | 'arjun_mechanic'
 }
 
 /**
+ * Returns the strict minimum threshold price point for a merchant and item.
+ * Merchants CANNOT and WILL NOT agree to any price below this threshold.
+ */
+export function getMerchantThresholdPrice(
+  merchantId: 'dev_shopkeeper' | 'arjun_mechanic',
+  item: CatalogItem
+): number {
+  if (merchantId === 'dev_shopkeeper' && item.id === 'pocket_compass') return 45;
+  if (merchantId === 'arjun_mechanic' && item.id === 'pocket_compass') return 48;
+  if (item.minPrice !== undefined) return item.minPrice;
+  const isDev = merchantId === 'dev_shopkeeper';
+  return Math.max(5, Math.round(item.basePrice * (isDev ? 0.75 : 0.80)));
+}
+
+/**
  * Returns a human-readable summary of items sold by a merchant for LLM prompt context
  */
 export function getMerchantCatalogSummary(merchantId: 'dev_shopkeeper' | 'arjun_mechanic'): string {
   const items = getMerchantItems(merchantId);
   return items
-    .map(
-      (item) =>
-        `- ${item.name} (${item.hindiName}) [ID: ${item.id}]: Base price ₹${item.basePrice}. Category: ${item.category}. Description: ${item.description}`
-    )
+    .map((item) => {
+      const threshold = getMerchantThresholdPrice(merchantId, item);
+      return `- ${item.name} (${item.hindiName}) [ID: ${item.id}]: Standard price ₹${item.basePrice}. Strict minimum threshold price: ₹${threshold} (ABSOLUTE FLOOR: Under no circumstances can you sell below ₹${threshold}). Category: ${item.category}. Description: ${item.description}`;
+    })
     .join('\n');
 }
 
@@ -467,26 +498,25 @@ export function evaluateNegotiation(
   patience: number
 ): NegotiationOutcome {
   const isDev = merchantId === 'dev_shopkeeper';
-  // Dev min multiplier: 0.60; Arjun min multiplier: 0.68
-  const minMultiplier = isDev ? 0.60 : 0.68;
-  const absoluteFloor = Math.round(item.basePrice * minMultiplier);
+  const absoluteFloor = getMerchantThresholdPrice(merchantId, item);
 
-  // If already at or below floor, or out of patience
+  // If out of patience and offering less than current asking price
   if (patience <= 1 && playerOffer < currentPrice) {
     return {
       accepted: false,
       agreedPrice: currentPrice,
+      counterOffer: absoluteFloor,
       merchantReplyHindi: isDev
-        ? 'बस बहुत हुआ भाई! इससे एक रुपया कम नहीं होगा। लेना है तो लो, वरना आगे बढ़ो।'
-        : 'मेरी मेहनत का मजाक मत उड़ाओ! इससे कम में मैं औजार भी नहीं छूऊंगा।',
+        ? `बस बहुत हुआ भाई! इससे एक रुपया कम नहीं होगा। मैं केवल ₹${absoluteFloor} तक ही दाम कम कर सकता था, पर अब ₹${currentPrice} ही लगेगा। लेना है तो लो!`
+        : `मेरी मेहनत का मजाक मत उड़ाओ! मैं केवल ₹${absoluteFloor} तक ही दाम कम कर सकता था। अब ₹${currentPrice} से कम में औजार भी नहीं छूऊंगा।`,
       merchantReplyEnglish: isDev
-        ? "That's my final limit! Not a single rupee less. Take it or move along."
-        : "Don't insult my craft! I won't even pick up a wrench for less than this.",
+        ? `That's my final limit! I can only reduce the cost till ₹${absoluteFloor} price, but right now it's ₹${currentPrice}. Take it or move along.`
+        : `Don't insult my craft! I can only reduce the cost till ₹${absoluteFloor} price. Won't take less than ₹${currentPrice}.`,
       patienceRemaining: 0,
     };
   }
 
-  // 1. Player accepted or offered higher
+  // 1. Player accepted or offered higher than current asking price
   if (playerOffer >= currentPrice) {
     return {
       accepted: true,
@@ -501,19 +531,19 @@ export function evaluateNegotiation(
     };
   }
 
-  // 2. Outrageous lowball (< 50% base price)
-  if (playerOffer < Math.round(item.basePrice * 0.50)) {
-    const newPatience = Math.max(0, patience - 2);
+  // 2. Strict Threshold Enforcement: Player offer is BELOW the merchant's minimum threshold price point
+  if (playerOffer < absoluteFloor) {
+    const newPatience = Math.max(0, patience - 1);
     return {
       accepted: false,
       agreedPrice: currentPrice,
-      counterOffer: Math.round(currentPrice * 0.90),
+      counterOffer: absoluteFloor,
       merchantReplyHindi: isDev
-        ? `अरे भाई रे भाई! ₹${playerOffer}? क्या मेरी दुकान लूटने आए हो? कम से कम ₹${Math.round(currentPrice * 0.90)} तो दो!`
-        : `पागल हो क्या? ₹${playerOffer} में तो स्क्रैप का टुकड़ा भी नहीं मिलता! ₹${Math.round(currentPrice * 0.90)} से कम में बात मत करो।`,
+        ? `₹${playerOffer} बहुत कम है भाई! मैं केवल ₹${absoluteFloor} तक ही दाम कम कर सकता हूँ। इससे कम में नहीं दे पाऊंगा।`
+        : `₹${playerOffer} में बिल्कुल नहीं! मैं केवल ₹${absoluteFloor} तक ही दाम कम कर सकता हूँ। मेरी कारीगरी का मोल समझो।`,
       merchantReplyEnglish: isDev
-        ? `Bhai re bhai! ₹${playerOffer}? Are you here to rob me? Give at least ₹${Math.round(currentPrice * 0.90)}!`
-        : `Are you mad? ₹${playerOffer} wouldn't even buy scrap metal! Don't offer anything below ₹${Math.round(currentPrice * 0.90)}.`,
+        ? `₹${playerOffer} is too low, neighbor! I can only reduce the cost till ₹${absoluteFloor} price. I cannot go below that.`
+        : `₹${playerOffer}? Absolutely not. I can only reduce the cost till ₹${absoluteFloor} price. Honest craftsmanship has a limit.`,
       patienceRemaining: newPatience,
     };
   }
@@ -521,45 +551,44 @@ export function evaluateNegotiation(
   // 3. Tactic Bonus Evaluation
   let tacticEffective = false;
   if (isDev) {
-    // Dev favors: bulk, loyal customer, cash upfront
+    // Dev favors: bulk, loyal customer, cash upfront, neighbor
     if (tactic.includes('neighbor') || tactic.includes('bulk') || tactic.includes('cash') || tactic.includes('emergency')) {
       tacticEffective = true;
     }
   } else {
-    // Arjun favors: clinic emergency, respect craft, direct payment
+    // Arjun favors: clinic emergency, respect craft, direct payment, machine
     if (tactic.includes('clinic') || tactic.includes('hospital') || tactic.includes('urgent') || tactic.includes('craft') || tactic.includes('machine')) {
       tacticEffective = true;
     }
   }
 
-  // If offer is above or equal to merchant floor
-  if (playerOffer >= absoluteFloor) {
-    if (tacticEffective || playerOffer >= Math.round(currentPrice * 0.80)) {
-      return {
-        accepted: true,
-        agreedPrice: playerOffer,
-        merchantReplyHindi: isDev
-          ? `चलो ठीक है! तुम्हारे तर्कों में दम है। यह ${item.hindiName} ₹${playerOffer} में तुम्हारी हुई!`
-          : `चलो माना। चूंकि यह गांव की भलाई और काम का सवाल है, ₹${playerOffer} में सौदा तय!`,
-        merchantReplyEnglish: isDev
-          ? `Alright, fair enough! You argue like a seasoned trader. The ${item.name} is yours for ₹${playerOffer}!`
-          : `Agreed. Since you understand the real necessity and urgency, sealed at ₹${playerOffer}!`,
-        patienceRemaining: Math.max(1, patience - 1),
-      };
-    }
+  // 4. Offer is at or above the minimum threshold floor:
+  // If tactic is effective or offer is within ~15% discount of current price
+  if (tacticEffective || playerOffer >= Math.round(currentPrice * 0.85)) {
+    return {
+      accepted: true,
+      agreedPrice: playerOffer,
+      merchantReplyHindi: isDev
+        ? `चलो ठीक है! तुम्हारे तर्कों में दम है। यह ${item.hindiName} ₹${playerOffer} में तुम्हारी हुई!`
+        : `चलो माना। चूंकि यह काम का सवाल है, ₹${playerOffer} में सौदा तय!`,
+      merchantReplyEnglish: isDev
+        ? `Alright, fair enough! You argue like a seasoned trader. The ${item.name} is yours for ₹${playerOffer}!`
+        : `Agreed. Since you understand the real necessity and craft, sealed at ₹${playerOffer}!`,
+      patienceRemaining: Math.max(1, patience - 1),
+    };
   }
 
-  // 4. Compromise Counter-Offer
+  // 5. Compromise Counter-Offer between player offer and current price (bounded by threshold floor)
   const compromisePrice = Math.max(absoluteFloor, Math.round((currentPrice + playerOffer) / 2));
   return {
     accepted: false,
     agreedPrice: currentPrice,
     counterOffer: compromisePrice,
     merchantReplyHindi: isDev
-      ? `₹${playerOffer} तो बहुत कम है, पर तुम्हारे लिए मैं ₹${compromisePrice} तक आ सकता हूँ। बोलो, मंजूर है?`
+      ? `₹${playerOffer} तो थोड़ा कम है, पर तुम्हारे लिए मैं ₹${compromisePrice} तक आ सकता हूँ। बोलो, मंजूर है?`
       : `₹${playerOffer} में मुझे घाटा होगा। बीच का रास्ता निकालते हैं: ₹${compromisePrice}। बोलो, हां या ना?`,
     merchantReplyEnglish: isDev
-      ? `₹${playerOffer} is too steep a loss, but for you I can come down to ₹${compromisePrice}. Deal?`
+      ? `₹${playerOffer} is a bit too steep a cut, but for you I can come down to ₹${compromisePrice}. Deal?`
       : `₹${playerOffer} leaves me in the red. Let's meet in the middle: ₹${compromisePrice}. Take it or leave it!`,
     patienceRemaining: Math.max(0, patience - 1),
   };

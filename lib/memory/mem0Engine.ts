@@ -111,29 +111,35 @@ export async function getOrCreateRelationship(
     };
   }
 
-  // Initialize new relationship (stranger)
-  const initialTier: RelationshipTier = 'stranger';
+  // Initialize new relationship (Wife starts with deep devotion; others as stranger)
+  const isWife = npcId === 'priya_wife';
+  const initialTier: RelationshipTier = isWife ? 'trusted_friend' : 'stranger';
+  const initialTrust = isWife ? 85 : 0;
+  const initialAffection = isWife ? 90 : 0;
+  const initialRespect = isWife ? 80 : 0;
+  const initialFamiliarity = isWife ? 95 : 0;
+
   await db
     .insert(npcRelationships)
     .values({
       userId,
       npcId,
-      trust: 0,
-      affection: 0,
-      respect: 0,
+      trust: initialTrust,
+      affection: initialAffection,
+      respect: initialRespect,
       fear: 0,
-      familiarity: 0,
+      familiarity: initialFamiliarity,
       relationshipTier: initialTier,
       interactionCount: 0,
     })
     .onConflictDoNothing();
 
   return {
-    trust: 0,
-    affection: 0,
-    respect: 0,
+    trust: initialTrust,
+    affection: initialAffection,
+    respect: initialRespect,
     fear: 0,
-    familiarity: 0,
+    familiarity: initialFamiliarity,
     relationshipTier: initialTier,
     interactionCount: 0,
   };
