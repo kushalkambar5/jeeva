@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import PixelButton from "./PixelButton";
 import {
@@ -27,12 +28,13 @@ interface DashboardClientProps {
 }
 
 export default function DashboardClient({ user }: DashboardClientProps) {
+  const router = useRouter();
   const [clicked, setClicked] = useState(false);
 
   const handlePlayGame = () => {
     // "in that for now only keep play game button, which will do nothing for now"
     setClicked(true);
-    console.log("Play Game clicked! (Stubbed action for now)");
+    router.push("/play");
   };
 
   const handleSignOut = async () => {

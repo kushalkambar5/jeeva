@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, jsonb, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, jsonb, timestamp, uuid, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -1152,3 +1152,100 @@ export const initialNPCDefinitions: NewNPCDefinition[] = [
     ]
   }
 ];
+
+/**
+ * -----------------------------------------------------------------------------
+ * NPC Cognitive Memory Tables (Mem0 Architecture with PostgreSQL & Vector Embeddings)
+ * -----------------------------------------------------------------------------
+ */
+
+/**
+ * 1. Unified Mem0 Vector Store for Episodic & Semantic Memories
+ * Scoped by userId and npcId. Universal world lore has userId = null.
+ */
+export const npcMemories = pgTable(
+  "npc_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" }),
+    npcId: varchar("npc_id", { length: 50 })
+      .notNull()
+      .references(() => npcDefinitions.id, { onDelete: "cascade" }),
+    sessionId: varchar("session_id", { length: 100 }),
+    memoryType: varchar("memory_type", { length: 30 }).notNull(), // 'episodic' | 'semantic'
+    content: text("content").notNull(),
+    embedding: jsonb("embedding").$type<number[]>().notNull(), // 768-dimensional float vector
+    importance: integer("importance").default(5).notNull(), // 1 to 10
+    emotionalValence: integer("emotional_valence").default(0).notNull(), // -100 to 100
+    metadata: jsonb("metadata").default({}).notNull(),
+    lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_npc_memories_user_npc").on(table.userId, table.npcId, table.memoryType),
+  ]
+);
+
+export type NPCMemory = typeof npcMemories.$inferSelect;
+export type NewNPCMemory = typeof npcMemories.$inferInsert;
+
+/**
+ * 2. Working Memory (Short-Term Dialogue & Action Turns)
+ * Scoped by userId and npcId to maintain active conversation context.
+ */
+export const npcWorkingMemories = pgTable(
+  "npc_working_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    npcId: varchar("npc_id", { length: 50 })
+      .notNull()
+      .references(() => npcDefinitions.id, { onDelete: "cascade" }),
+    sessionId: varchar("session_id", { length: 100 }),
+    role: varchar("role", { length: 20 }).notNull(), // 'user' | 'assistant' | 'action'
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_working_mem_user_npc_time").on(table.userId, table.npcId, table.createdAt),
+  ]
+);
+
+export type NPCWorkingMemory = typeof npcWorkingMemories.$inferSelect;
+export type NewNPCWorkingMemory = typeof npcWorkingMemories.$inferInsert;
+
+/**
+ * 3. Relational Memory (Multi-Dimensional Psychological Standing)
+ * Maintains trust, affection, respect, fear, and familiarity per user-NPC pair.
+ */
+export const npcRelationships = pgTable(
+  "npc_relationships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    npcId: varchar("npc_id", { length: 50 })
+      .notNull()
+      .references(() => npcDefinitions.id, { onDelete: "cascade" }),
+    trust: integer("trust").default(0).notNull(), // -100 to 100 (affects trade deals, prices, secrets)
+    affection: integer("affection").default(0).notNull(), // -100 to 100 (affects tone and warmth)
+    respect: integer("respect").default(0).notNull(), // -100 to 100 (competence/reputation)
+    fear: integer("fear").default(0).notNull(), // 0 to 100 (intimidation)
+    familiarity: integer("familiarity").default(0).notNull(), // 0 to 100 (accumulated interaction depth)
+    relationshipTier: varchar("relationship_tier", { length: 50 }).default("stranger").notNull(),
+    interactionCount: integer("interaction_count").default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("uniq_npc_relationship").on(table.userId, table.npcId),
+  ]
+);
+
+export type NPCRelationship = typeof npcRelationships.$inferSelect;
+export type NewNPCRelationship = typeof npcRelationships.$inferInsert;
+

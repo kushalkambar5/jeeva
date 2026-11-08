@@ -757,7 +757,7 @@ export class InteriorScene extends Phaser.Scene {
       residentId = 'priya_wife';
       rx = 210;
       ry = 160; // Cozy near dining table and hearth
-      rActivity = 'Resting by Hearth';
+      rActivity = 'Wife';
     } else if (this.buildingId === 'shop') {
       residentId = 'dev_shopkeeper';
       rx = 255;

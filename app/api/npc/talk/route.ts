@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 import { getNPCTraits, generateNPCDialogue } from '@/lib/npcDialogue';
 import { transcribeAudio, synthesizeSpeech, normalizeLanguageCode } from '@/lib/gnani';
+import {
+  getNPCFullMemoryContext,
+  processDialogueMem0Lifecycle,
+  resolveActiveUserId,
+} from '@/lib/memory';
 
 // Configured threshold radius for speaking with an NPC in pixels
 export const TALK_THRESHOLD_RADIUS = 60;
@@ -13,6 +20,8 @@ export async function POST(req: NextRequest) {
     let language = 'auto';
     let messageText = '';
     let playerWallet: number | undefined;
+    let requestedUserId = '';
+    let sessionId = '';
     let audioFile: Blob | null = null;
 
     if (contentType.includes('multipart/form-data')) {
@@ -20,6 +29,8 @@ export async function POST(req: NextRequest) {
       npcId = (formData.get('npcId') as string) || '';
       language = (formData.get('language') as string) || 'auto';
       messageText = (formData.get('message') as string) || '';
+      requestedUserId = (formData.get('userId') as string) || '';
+      sessionId = (formData.get('sessionId') as string) || '';
       const distStr = formData.get('playerDistance') as string;
       if (distStr) {
         playerDistance = parseFloat(distStr);
@@ -39,6 +50,8 @@ export async function POST(req: NextRequest) {
       messageText = json.message || '';
       playerDistance = json.playerDistance;
       playerWallet = json.playerWallet;
+      requestedUserId = json.userId || '';
+      sessionId = json.sessionId || '';
     }
 
     if (!npcId) {
@@ -115,15 +128,46 @@ export async function POST(req: NextRequest) {
       transcribedText
     );
 
-    // 2. Generate NPC reply strictly using the NPC's traits (stateless, no memory)
+    // 2. Resolve Active Player Identity (Session or Request or Default Player)
+    const session = await getServerSession(authOptions);
+    const sessionUserId = (session?.user as any)?.id;
+    const activeUserId = await resolveActiveUserId(sessionUserId, requestedUserId);
+
+    // 3. Retrieve Mem0 Cognitive Context (Working, Episodic, Relational, Semantic)
+    let memoryContext: any = null;
+    try {
+      memoryContext = await getNPCFullMemoryContext(
+        activeUserId,
+        traits.id,
+        transcribedText,
+        sessionId
+      );
+    } catch (memErr) {
+      console.warn('[Mem0] Could not load memory context (continuing gracefully):', memErr);
+    }
+
+    // 4. Generate NPC reply with traits and personalized Mem0 context
     const dialogueResult = await generateNPCDialogue(
       traits,
       transcribedText,
       resolvedLanguage,
-      playerWallet
+      playerWallet,
+      memoryContext
     );
 
-    // 3. Synthesize spoken audio for the NPC reply via Gnani TTS (Timbre v2.5)
+    // 5. Post-Dialogue Mem0 Lifecycle (Working memory append, relationship delta, memory extraction)
+    processDialogueMem0Lifecycle({
+      userId: activeUserId,
+      npcId: traits.id,
+      userMessage: transcribedText,
+      npcReply: dialogueResult.replyText,
+      toolCall: dialogueResult.toolCall,
+      sessionId,
+    }).catch((lifecycleErr) => {
+      console.warn('[Mem0 Lifecycle] Background processing error:', lifecycleErr);
+    });
+
+    // 6. Synthesize spoken audio for the NPC reply via Gnani TTS (Timbre v2.5)
     let audioBase64: string | null = null;
     let ttsLatencyMs = 0;
     try {
@@ -153,6 +197,20 @@ export async function POST(req: NextRequest) {
       audioBase64,
       thresholdRadius: TALK_THRESHOLD_RADIUS,
       playerDistance,
+      memory: memoryContext
+        ? {
+            userId: activeUserId,
+            relationshipTier: memoryContext.relationship.relationshipTier,
+            trust: memoryContext.relationship.trust,
+            affection: memoryContext.relationship.affection,
+            respect: memoryContext.relationship.respect,
+            familiarity: memoryContext.relationship.familiarity,
+            recalledEpisodesCount: memoryContext.episodicMemories.length,
+            recalledSemanticCount: memoryContext.semanticMemories.length,
+            recalledEpisodes: memoryContext.episodicMemories.map((m: any) => m.content),
+            recalledFacts: memoryContext.semanticMemories.map((m: any) => m.content),
+          }
+        : null,
       toolCall: dialogueResult.toolCall
         ? {
             tool: dialogueResult.toolCall.tool,

@@ -104,6 +104,7 @@ export default function GameTestingCanvas() {
   const [isInventoryOpen, setIsInventoryOpen] = useState<boolean>(false);
   const [selectedHotbarIndex, setSelectedHotbarIndex] = useState<number>(0);
   const [dialogueInputText, setDialogueInputText] = useState<string>('');
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
   // NPC Tool Use: Companion Following State
   const [followingNpcState, setFollowingNpcState] = useState<{
@@ -357,6 +358,13 @@ export default function GameTestingCanvas() {
         npcRole: data.npcRole || targetNpc.activityLabel || 'Villager',
       });
 
+      if (!data.audioBase64) {
+        if (subtitleDismissTimerRef.current) clearTimeout(subtitleDismissTimerRef.current);
+        subtitleDismissTimerRef.current = setTimeout(() => {
+          setSubtitleState(null);
+        }, 7000);
+      }
+
       // 3. Process AI NPC Tool Use (follow_player, stop_following, go_home, trade_deal)
       if (data.toolCall) {
         if (data.toolCall.tool === 'follow_player') {
@@ -505,6 +513,13 @@ export default function GameTestingCanvas() {
         npcSpriteSrc: targetNpc.spriteSrc,
         npcRole: data.npcRole || targetNpc.activityLabel || 'Villager',
       });
+
+      if (!data.audioBase64) {
+        if (subtitleDismissTimerRef.current) clearTimeout(subtitleDismissTimerRef.current);
+        subtitleDismissTimerRef.current = setTimeout(() => {
+          setSubtitleState(null);
+        }, 7000);
+      }
 
       if (data.toolCall) {
         if (data.toolCall.tool === 'follow_player') {
@@ -729,11 +744,19 @@ export default function GameTestingCanvas() {
           }
         }
       }
+      // KEY T: Toggle optional typing chat input
+      if (e.key === 't' || e.key === 'T') {
+        if (!inspectModal && !isInventoryOpen && !showRoster && !showMinimap && !isChatOpen) {
+          e.preventDefault();
+          setIsChatOpen(true);
+        }
+      }
       if (e.key === 'Escape') {
         setInspectModal(null);
         setShowMinimap(false);
         setShowRoster(false);
         setIsInventoryOpen(false);
+        setIsChatOpen(false);
         if (subtitleState) {
           if (currentAudioRef.current) {
             currentAudioRef.current.pause();
@@ -849,9 +872,6 @@ export default function GameTestingCanvas() {
 
           <span className="font-pixel text-sm font-bold text-[#F4D477] tracking-wider flex items-center gap-1.5">
             <span>JEEVA VILLAGE</span>
-            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-[#315B3C] text-[#93C476] border border-[#78A85B]/40">
-              Schedule Simulation
-            </span>
           </span>
         </div>
 
@@ -866,56 +886,8 @@ export default function GameTestingCanvas() {
             <span>{gameState.gameTime || '09:30 AM'}</span>
           </div>
 
-          <button
-            onClick={handleToggleClock}
-            title={isClockPaused ? 'Resume Clock' : 'Pause Clock'}
-            className="p-1 rounded bg-[#1F3B27] hover:bg-[#315B3C] border border-[#28392E] text-[#93C476] transition cursor-pointer"
-          >
-            {isClockPaused ? <Play className="w-3 h-3 text-[#93C476]" /> : <Pause className="w-3 h-3 text-[#F4D477]" />}
-          </button>
-
           <div className="h-3 w-px bg-[#28392E]" />
 
-          {/* Preset Buttons */}
-          <div className="flex items-center gap-1 text-[10px] font-pixel">
-            <button
-              onClick={() => handleSetPresetTime(360)}
-              className="px-2 py-0.5 rounded bg-[#1F3B27] hover:bg-[#315B3C] text-[#FFF8E9] border border-[#28392E] transition"
-              title="Dawn - 06:00 AM"
-            >
-              06:00 Dawn
-            </button>
-            <button
-              onClick={() => handleSetPresetTime(570)}
-              className="px-2 py-0.5 rounded bg-[#315B3C] hover:bg-[#78A85B] text-[#F4D477] border border-[#78A85B]/50 transition font-bold"
-              title="Morning - 09:30 AM"
-            >
-              09:30 Day
-            </button>
-            <button
-              onClick={() => handleSetPresetTime(810)}
-              className="px-2 py-0.5 rounded bg-[#1F3B27] hover:bg-[#315B3C] text-[#FFF8E9] border border-[#28392E] transition"
-              title="Midday - 01:30 PM"
-            >
-              13:30 Noon
-            </button>
-            <button
-              onClick={() => handleSetPresetTime(1050)}
-              className="px-2 py-0.5 rounded bg-[#1F3B27] hover:bg-[#315B3C] text-[#FFF8E9] border border-[#28392E] transition"
-              title="Dusk - 05:30 PM"
-            >
-              17:30 Dusk
-            </button>
-            <button
-              onClick={() => handleSetPresetTime(1320)}
-              className="px-2 py-0.5 rounded bg-[#1F3B27] hover:bg-[#315B3C] text-[#75B9D0] border border-[#28392E] transition"
-              title="Night - 10:00 PM"
-            >
-              22:00 Night
-            </button>
-          </div>
-
-          <div className="h-3 w-px bg-[#28392E]" />
 
           {/* Time Scrubber Slider */}
           <div className="flex items-center gap-1.5 w-24">
@@ -1068,128 +1040,58 @@ export default function GameTestingCanvas() {
         </div>
       )}
 
-      {/* 3D. Dialogue Subtitle Box (Down part of screen) */}
+      {/* 3D. Cinematic Movie Subtitles (Lower Third of Screen) */}
       {subtitleState && voiceState.status === 'idle' && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[94%] md:w-full bg-[#14271A]/95 backdrop-blur-md border-2 border-[#78A85B] rounded-xl p-4 md:p-5 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#28392E]">
-            <div className="flex items-center gap-2.5">
-              {subtitleState.npcSpriteSrc && (
-                <div className="w-7 h-7 rounded bg-[#1F3B27] border border-[#78A85B]/50 flex items-center justify-center overflow-hidden shrink-0">
-                  <PixelSprite
-                    src={subtitleState.npcSpriteSrc}
-                    frameWidth={32}
-                    frameHeight={32}
-                    scale={1.1}
-                    animate={false}
-                  />
-                </div>
-              )}
-              <div>
-                <span className="font-pixel text-xs text-[#F4D477] font-bold tracking-wide">
-                  {subtitleState.npcName}
-                </span>
-                {subtitleState.npcRole && (
-                  <span className="text-[10px] text-[#BAC9B9] ml-2 font-mono">
-                    ({subtitleState.npcRole})
-                  </span>
-                )}
-              </div>
-              {subtitleState.isPlayingAudio && (
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#315B3C] text-[#93C476] text-[10px] font-mono animate-pulse">
-                  <Volume2 className="w-3 h-3 text-[#F4D477]" />
-                  <span>Speaking</span>
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {subtitleState.audioBase64 && (
-                <button
-                  onClick={() => replaySubtitleAudio(subtitleState.audioBase64!)}
-                  title="Replay Voice Audio"
-                  className="px-2 py-0.5 rounded bg-[#1F3B27] hover:bg-[#315B3C] border border-[#28392E] text-[#F4D477] transition cursor-pointer flex items-center gap-1 text-[10px] font-mono"
-                >
-                  <Volume2 className="w-3 h-3" />
-                  <span>Replay Voice</span>
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  if (currentAudioRef.current) {
-                    currentAudioRef.current.pause();
-                    currentAudioRef.current = null;
-                  }
-                  setSubtitleState(null);
-                }}
-                className="p-1 rounded text-[#BAC9B9] hover:text-white hover:bg-[#1F3B27] transition cursor-pointer"
+        <div className="absolute bottom-20 md:bottom-24 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none max-w-3xl w-[92%] md:w-auto flex flex-col items-center justify-center animate-in fade-in duration-200">
+          <div className="bg-black/75 backdrop-blur-[2px] px-6 py-2.5 rounded-lg shadow-2xl border border-white/10 text-center space-y-1">
+            {subtitleState.playerText && (
+              <div
+                className="text-sm md:text-base font-sans tracking-wide leading-snug"
+                style={{ textShadow: '0 2px 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.9)' }}
               >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* User Requested Format:
-              "player: ....................................."
-              "npc_name: ......................." */}
-          <div className="space-y-1.5 text-sm md:text-[15px] font-sans leading-relaxed">
-            <div className="bg-[#0F1712]/70 rounded-lg p-2.5 border border-[#28392E] flex items-start gap-2">
-              <span className="font-pixel font-bold text-[#75B9D0] text-sm md:text-base shrink-0 select-none">
-                player:
-              </span>
-              <span className="text-[#FFF8E9] leading-snug">
-                {subtitleState.playerText}
-              </span>
-            </div>
-
-            <div className="bg-[#0F1712]/70 rounded-lg p-2.5 border border-[#28392E] flex items-start gap-2">
-              <span className="font-pixel font-bold text-[#F4D477] text-sm md:text-base shrink-0 select-none">
-                {subtitleState.npcName.toLowerCase()}:
-              </span>
-              <span className="text-[#FFF8E9] font-medium leading-snug">
-                {subtitleState.replyText}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 mt-2 border-t border-[#28392E]/60 text-[11px] font-mono text-[#93C476]/80">
-            <div className="flex items-center gap-1.5">
-              <span>Hold <span className="px-1.5 py-0.5 rounded bg-[#1F3B27] border border-[#78A85B]/40 text-[#F4D477] font-bold font-pixel text-[10px]">
-                SPACE
-              </span> to speak again</span>
-            </div>
-            {subtitleState.language && (
-              <span className="text-[10px] text-stone-400">
-                Auto-detected: {subtitleState.language}
-              </span>
+                <span className="text-[#F4D477] font-semibold">player: </span>
+                <span className="text-[#FFFDF5] font-medium">{subtitleState.playerText}</span>
+              </div>
             )}
-          </div>
-
-          {/* Conversational input: Speak with Space OR type message here */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (dialogueInputText.trim()) {
-                handleSendTextDialogue(dialogueInputText.trim());
-                setDialogueInputText('');
-              }
-            }}
-            className="flex items-center gap-2 pt-2 mt-2 border-t border-[#28392E]"
-          >
-            <input
-              type="text"
-              value={dialogueInputText}
-              onChange={(e) => setDialogueInputText(e.target.value)}
-              placeholder='Type message or trade (e.g. "Buy copper coil", "Coil kitne ki hai?", "Follow me")...'
-              className="flex-1 bg-[#0F1712] border border-[#28392E] rounded px-3 py-1.5 text-xs text-[#FFF8E9] placeholder-[#BAC9B9]/50 focus:outline-hidden focus:border-[#F4D477]"
-            />
-            <button
-              type="submit"
-              className="px-3 py-1.5 rounded bg-[#F4D477] hover:bg-[#ffe188] text-[#0F1712] font-pixel text-xs font-bold transition cursor-pointer"
+            <div
+              className="text-sm md:text-base font-sans tracking-wide leading-snug"
+              style={{ textShadow: '0 2px 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.9)' }}
             >
-              Send
-            </button>
-          </form>
+              <span className="text-[#F4D477] font-semibold">{subtitleState.npcName.toLowerCase()}: </span>
+              <span className="text-[#FFFDF5] font-medium">{subtitleState.replyText}</span>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* Optional Minimal Single-Line Chat Input (Opened with 'T' or Enter when near NPC) */}
+      {isChatOpen && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (dialogueInputText.trim()) {
+              handleSendTextDialogue(dialogueInputText.trim());
+              setDialogueInputText('');
+              setIsChatOpen(false);
+            }
+          }}
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md bg-black/85 backdrop-blur-md border border-[#F4D477]/60 rounded-lg p-2 shadow-2xl flex items-center gap-2"
+        >
+          <input
+            type="text"
+            autoFocus
+            value={dialogueInputText}
+            onChange={(e) => setDialogueInputText(e.target.value)}
+            placeholder={`Say to ${gameState.activeInteraction?.name || 'villager'}... (Press Enter to send, Esc to cancel)`}
+            className="flex-1 bg-transparent px-2 py-1 text-sm text-[#FFFDF5] placeholder-stone-400 focus:outline-hidden"
+          />
+          <button
+            type="submit"
+            className="px-3 py-1 rounded bg-[#F4D477] hover:bg-[#ffe188] text-[#0F1712] font-pixel text-xs font-bold transition cursor-pointer"
+          >
+            Send
+          </button>
+        </form>
       )}
 
       {/* 3E. Proximity Interaction Banner (When near NPC or Object) */}

@@ -18,7 +18,7 @@ export default function Navbar({ onOpenLogin }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
-    { name: "Game Map", href: "/game/testing" },
+    { name: "Play Game", href: "/play" },
     { name: "Features", href: "#features" },
     { name: "The World", href: "#world" },
     { name: "Characters", href: "#characters" },

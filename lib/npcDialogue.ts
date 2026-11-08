@@ -12,6 +12,7 @@ import {
   getMerchantCatalogSummary,
   type CatalogItem,
 } from './inventory';
+import { buildMemoryPromptSection, type FullNPCMemoryContext } from './memory';
 
 export interface NPCTraitsContext {
   id: string;
@@ -29,14 +30,19 @@ export interface NPCTraitsContext {
 export const NPC_VOICE_MAP: Record<string, string> = {
   priya_wife: 'Nalini',
   ravi_farmer: 'Deepak',
+  meera_doctor: 'Kaveri',
   dr_meera: 'Kaveri',
   arjun_mechanic: 'Deepak',
   suresh_villager: 'Deepak',
   suresh_shopkeeper: 'Deepak',
+  dev_shopkeeper: 'Deepak',
   dev_merchant: 'Deepak',
+  ramesh_elder: 'Deepak',
   elder_dayanand: 'Deepak',
+  vikram_police: 'Deepak',
   inspector_vikram: 'Deepak',
   kalia_thief: 'Deepak',
+  maya_villager: 'Nalini',
   lakshmi_weaver: 'Nalini',
   anand_potter: 'Deepak',
 };
@@ -46,7 +52,14 @@ export const NPC_VOICE_MAP: Record<string, string> = {
  * Strictly excludes any story lore, storm background, or plot narratives.
  */
 export async function getNPCTraits(npcId: string): Promise<NPCTraitsContext | null> {
-  const def = initialNPCDefinitions.find((n) => n.id === npcId);
+  const CANONICAL_NPC_IDS: Record<string, string> = {
+    dev_merchant: 'dev_shopkeeper',
+    dr_meera: 'meera_doctor',
+    elder_dayanand: 'ramesh_elder',
+    inspector_vikram: 'vikram_police',
+  };
+  const lookupId = CANONICAL_NPC_IDS[npcId] || npcId;
+  const def = initialNPCDefinitions.find((n) => n.id === lookupId);
   if (!def) return null;
 
   return {
@@ -93,13 +106,13 @@ export const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
 };
 
 /**
- * Builds the prompt using ONLY character traits (name, role, personality traits, speaking style).
- * ZERO story context, storms, disasters, or plot backstories.
+ * Builds the prompt using character traits and personalized Mem0 memory context.
  */
 function buildRowTraitsPrompt(
   traits: NPCTraitsContext,
   requestedLanguage: string,
-  playerWallet?: number
+  playerWallet?: number,
+  memoryPromptBlock?: string
 ): string {
   const langName = LANGUAGE_DISPLAY_NAMES[requestedLanguage] || requestedLanguage;
   const isMerchant = traits.id === 'dev_shopkeeper' || traits.id === 'arjun_mechanic';
@@ -133,20 +146,25 @@ CONVERSATIONAL TRADING RULES:
 `;
   }
 
-  return `You are roleplaying as ${traits.name}, a village resident.
+  const memoryContextSection = memoryPromptBlock
+    ? `\n${memoryPromptBlock}\n`
+    : '';
+
+  return `You are roleplaying as ${traits.name}, a village resident of Kaveripura.
 Character traits from the 'npc_definitions' database table:
 - Name: ${traits.name}
 - Role: ${traits.role}
 - Personality Traits: ${traits.personality_traits.join(', ')}
 - Speaking Style: ${traits.speaking_style}
 
+${memoryContextSection}
+
 STRICT CONSTRAINTS:
 1. The player is standing directly in front of you in the village and speaking to you face-to-face.
-2. Respond directly, naturally, and warmly to whatever the player says or asks.
-3. DO NOT mention or invent any story plots, storms, disasters, missions, or waiting for anyone to return.
-4. You have NO memory of any past conversations.
-5. Reply in 1 natural conversational spoken sentence in the player's language (${langName}). If the player speaks in Hindi, reply in natural conversational Hindi. If the player speaks in English, reply in natural conversational English. If the player speaks in Tamil, reply in natural conversational Tamil, etc.
-6. Output ONLY the spoken words. No quotation marks, no character name prefix.
+2. Respond directly, naturally, and warmly to whatever the player says or asks, staying true to your personality and your memory/relationship with them.
+3. If you have recalled memories or a psychological relationship with this player, acknowledge them naturally in character. Never contradict established memories or facts.
+4. Reply in 1-2 natural conversational spoken sentences in the player's language (${langName}). If the player speaks in Hindi, reply in natural conversational Hindi. If the player speaks in English, reply in natural conversational English. If the player speaks in Tamil, reply in natural conversational Tamil, etc.
+5. Output ONLY the spoken words. No quotation marks, no character name prefix.
 
 AVAILABLE TOOLS & ACTIONS:
 - If the player asks or invites you to follow them (e.g. "follow me", "mere saath aao", "chalo saath", "come with me", "chalo bahar", "bahar chalo", "come outside"), accept enthusiastically and append "[TOOL: follow_player]" at the very end of your response.
@@ -157,17 +175,21 @@ ${merchantSection}`;
 
 /**
  * Generates an un-hardcoded, fully dynamic in-character dialogue turn for the NPC.
- * Calls the dynamic LLM model with the bounded row traits context.
+ * Calls the dynamic LLM model with the bounded row traits context and Mem0 memories.
  */
 export async function generateNPCDialogue(
   traits: NPCTraitsContext,
   playerMessage: string,
   preferredLanguage?: string,
-  playerWallet?: number
+  playerWallet?: number,
+  memoryContext?: FullNPCMemoryContext
 ): Promise<DialogueGenerationResult> {
   const lang = preferredLanguage || traits.default_language || 'hi-IN';
   const voice = traits.assignedVoice;
-  const systemPrompt = buildRowTraitsPrompt(traits, lang, playerWallet);
+  const memoryPromptBlock = memoryContext
+    ? buildMemoryPromptSection(memoryContext, traits.name)
+    : undefined;
+  const systemPrompt = buildRowTraitsPrompt(traits, lang, playerWallet, memoryPromptBlock);
 
   // 1. Dynamic LLM Generation via Groq (Ultra-low latency, flagship multilingual Indic support)
   const groqApiKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : '';
