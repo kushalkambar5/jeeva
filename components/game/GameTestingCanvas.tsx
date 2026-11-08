@@ -808,15 +808,79 @@ export default function GameTestingCanvas() {
       }
     };
 
+    const handleFarmerScold = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail) return;
+
+      // 1. Play audio synthesized voice
+      if (detail.audioUrl) {
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause();
+          currentAudioRef.current = null;
+        }
+        const audio = new Audio(detail.audioUrl);
+        currentAudioRef.current = audio;
+        setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: true } : null));
+        audio.onplay = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: true } : null));
+        };
+        audio.onended = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+          if (subtitleDismissTimerRef.current) clearTimeout(subtitleDismissTimerRef.current);
+          subtitleDismissTimerRef.current = setTimeout(() => {
+            setSubtitleState(null);
+          }, 4000);
+        };
+        audio.onerror = () => {
+          setSubtitleState((prev) => (prev ? { ...prev, isPlayingAudio: false } : null));
+        };
+        audio.play().catch((err) => console.warn('Farmer scold audio error:', err));
+      }
+
+      // 2. Display movie subtitle
+      setSubtitleState({
+        playerText: '*tramples on the farm crops*',
+        npcName: 'Ravi',
+        replyText: `${detail.hindi}\n("${detail.english}")`,
+        language: 'hi-IN',
+        isPlayingAudio: true,
+        npcSpriteSrc: '/assets/characters/farmer.png',
+        npcRole: 'Village Farmer & Granary Keeper',
+      });
+
+      if (subtitleDismissTimerRef.current) clearTimeout(subtitleDismissTimerRef.current);
+      subtitleDismissTimerRef.current = setTimeout(() => {
+        setSubtitleState(null);
+      }, 7000);
+
+      // 3. Screen alert / warning toast
+      setToolToast('💢 Ravi the Farmer: "Get off my crops!"');
+      setTimeout(() => setToolToast(null), 4000);
+
+      // 4. Record to Mem0 episodic memory and relationship
+      fetch('/api/npc/memory-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          npcId: 'ravi_farmer',
+          event: 'The player trampled my cultivated crop fields. I angrily scolded them and told them to step off immediately.',
+          respectDelta: -3,
+          trustDelta: -2,
+        }),
+      }).catch((err) => console.warn('Failed to record memory event:', err));
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('wheel', handleWheel, { passive: true });
     window.addEventListener('jeeva:item-picked-up', handleItemPickedUp);
+    window.addEventListener('jeeva:farmer-scold', handleFarmerScold);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('jeeva:item-picked-up', handleItemPickedUp);
+      window.removeEventListener('jeeva:farmer-scold', handleFarmerScold);
     };
   }, [
     gameState.activeInteraction,

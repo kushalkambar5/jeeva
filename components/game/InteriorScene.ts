@@ -401,7 +401,7 @@ export class InteriorScene extends Phaser.Scene {
     this.createStaticCollider(430, 190, 65, 95);
     // Examination Table (center)
     this.createStaticCollider(256, 185, 75, 65);
-    // Dr. Priya's Desk
+    // Dr. Meera's Desk
     this.createStaticCollider(255, 285, 105, 45);
     // Supply Cabinets
     this.createStaticCollider(75, 50, 70, 55);
@@ -429,17 +429,17 @@ export class InteriorScene extends Phaser.Scene {
         y: 190,
         radius: 48,
         title: 'Examination Table',
-        description: 'Sanitized clinical table where Dr. Priya examines injured villagers and monitors vital recovery stats.',
+        description: 'Sanitized clinical table where Dr. Meera examines injured villagers and monitors vital recovery stats.',
         actionLabel: 'Inspect Bed',
       },
       {
         id: 'hospital_desk',
-        name: "Dr. Priya's Desk",
+        name: "Dr. Meera's Desk",
         type: 'inspect',
         x: 255,
         y: 285,
         radius: 48,
-        title: "Dr. Priya's Consultation Desk",
+        title: "Dr. Meera's Consultation Desk",
         description: 'Patient case charts, herbal formula notes, and brass stethoscope resting on an orderly mahogany desk.',
         actionLabel: 'Read Case Notes',
       },
@@ -768,6 +768,11 @@ export class InteriorScene extends Phaser.Scene {
       rx = 240;
       ry = 180; // Beside fabrication workbench
       rActivity = 'Tinkering at Workbench';
+    } else if (this.buildingId === 'hospital') {
+      residentId = 'meera_doctor';
+      rx = 255;
+      ry = 240; // Standing behind clinic consultation desk
+      rActivity = 'Treating Patients & Directing Clinic';
     }
 
     // 3. Spawn resident NPC if stationed here and not already spawned as the following companion
@@ -834,7 +839,7 @@ export class InteriorScene extends Phaser.Scene {
       type: 'npc',
       x,
       y,
-      radius: 48,
+      radius: 64,
       title: `${template.name} — ${template.role}`,
       description: isFollowing
         ? `${template.name} is currently following you.`
@@ -983,7 +988,7 @@ export class InteriorScene extends Phaser.Scene {
       case 'player_home':
         return "Inside Kushal's Cottage";
       case 'hospital':
-        return "Inside Dr. Priya's Health Clinic";
+        return "Inside Dr. Meera's Health Clinic";
       case 'shop':
         return "Inside Dev's General Store";
       case 'workshop':

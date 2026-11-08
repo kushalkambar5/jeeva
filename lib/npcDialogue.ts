@@ -148,6 +148,15 @@ CONVERSATIONAL TRADING RULES:
 `;
   }
 
+  let farmerSection = '';
+  if (traits.id === 'ravi_farmer') {
+    farmerSection = `
+FARMLAND & CROP PROTECTION AWARENESS:
+You are Ravi, the rugged village farmer who guards his crops and granary fiercely after the monsoon storm washed out half your winter seedlings.
+If the player recently walked on or trampled your crops or asks about your fields, you are protective, blunt, and stern! Demand that they respect the soil, keep their boots off your vegetable furrows, and use the road!
+`;
+  }
+
   const memoryContextSection = memoryPromptBlock
     ? `\n${memoryPromptBlock}\n`
     : '';
@@ -159,6 +168,8 @@ Character traits from the 'npc_definitions' database table:
 - Personality Traits: ${traits.personality_traits.join(', ')}
 - Speaking Style: ${traits.speaking_style}
 
+${merchantSection}
+${farmerSection}
 ${memoryContextSection}
 
 DYNAMIC LANGUAGE MIRRORING RULE (CRITICAL):

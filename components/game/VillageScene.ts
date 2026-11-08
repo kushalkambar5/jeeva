@@ -24,6 +24,7 @@ import {
   loadPlayerInventory,
 } from '@/lib/inventory';
 import { getNpcLocations, setNpcLocation, RESIDENT_NPC_BUILDINGS } from '@/lib/npcLocations';
+import { getNextFarmerScold } from '@/lib/farmerScolds';
 
 export interface VillageSceneInitData {
   returnPos?: { x: number; y: number };
@@ -121,6 +122,11 @@ export class VillageScene extends Phaser.Scene {
   // Dropped World Items (Minecraft Q Key & Merchant Drops)
   private droppedItems: Map<string, LiveDroppedItem> = new Map();
   private boundDroppedItemsListener?: () => void;
+
+  // Farmer Ravi Farm Trespassing & Scolding System
+  private lastFarmerScoldTime = 0;
+  private wasOnFarm = false;
+  private scoldBubbleContainer: Phaser.GameObjects.Container | null = null;
 
   // Throttling State Broadcasts to prevent React re-render thrashing
   private lastBroadcastTime = 0;
@@ -360,6 +366,10 @@ export class VillageScene extends Phaser.Scene {
       this.events.once('shutdown', () => {
         if (this.boundDroppedItemsListener) {
           window.removeEventListener('jeeva:dropped-items-updated', this.boundDroppedItemsListener);
+        }
+        if (this.scoldBubbleContainer) {
+          this.scoldBubbleContainer.destroy();
+          this.scoldBubbleContainer = null;
         }
       });
     }
@@ -1447,6 +1457,13 @@ export class VillageScene extends Phaser.Scene {
 
     this.player.setDepth(this.player.y);
 
+    // Farmer Ravi Scold: Check if player walks on the farm / cultivated crops
+    const px = this.player.x;
+    const py = this.player.y;
+    const isOnFarm = px >= 480 && px <= 800 && py >= 740 && py <= 1020;
+    const isOnCropBeds = px >= 515 && px <= 735 && py >= 775 && py <= 920;
+    this.checkFarmerFarmScold(time, isMoving, isOnFarm, isOnCropBeds);
+
     // Proximity Interaction Detection
     let nearest: InteractionPoint | null = null;
     let minDistance = 999999;
@@ -1501,5 +1518,155 @@ export class VillageScene extends Phaser.Scene {
     }
 
     this.broadcastState(false, isMoving, isSprinting);
+  }
+
+  /**
+   * Evaluates if the player is currently walking on the farm / cultivated crops.
+   * If trespassing on crops, triggers Ravi the farmer to scold the player.
+   */
+  private checkFarmerFarmScold(now: number, isMoving: boolean, isOnFarm: boolean, isOnCropBeds: boolean) {
+    if (!isMoving || !isOnFarm) {
+      if (!isOnFarm) {
+        this.wasOnFarm = false;
+      }
+      return;
+    }
+
+    const justEntered = !this.wasOnFarm;
+    this.wasOnFarm = true;
+
+    // Cooldown: 7.5 seconds if directly on crop beds, 10 seconds if on outer farm
+    const cooldownMs = isOnCropBeds ? 7500 : 10000;
+    if (!justEntered && now - this.lastFarmerScoldTime < cooldownMs) {
+      return;
+    }
+
+    this.lastFarmerScoldTime = now;
+    this.triggerFarmerScold(isOnCropBeds);
+  }
+
+  /**
+   * Ravi the farmer turns to the player, angrily shakes in indignation,
+   * shows an overhead anger bubble, plays an alert sound, and dispatches scold dialogue & audio.
+   */
+  private triggerFarmerScold(isOnCropBeds: boolean) {
+    const ravi = this.liveNPCs.get('ravi_farmer');
+    if (ravi) {
+      // 1. Ravi immediately turns to face the player
+      const dx = this.player.x - ravi.sprite.x;
+      const dy = this.player.y - ravi.sprite.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        ravi.facing = dx > 0 ? 'right' : 'left';
+      } else {
+        ravi.facing = dy > 0 ? 'down' : 'up';
+      }
+      ravi.sprite.setFrame(getIdleFrameForFacing(ravi.data.sprite_key, ravi.facing));
+
+      // Pause wandering to glare in indignation
+      ravi.behaviorState = 'idle';
+      ravi.idleWaitTimer = 3.5;
+
+      // 2. Ravi angrily shakes in indignation
+      this.tweens.add({
+        targets: ravi.sprite,
+        x: ravi.sprite.x + (dx > 0 ? 4 : -4),
+        duration: 45,
+        yoyo: true,
+        repeat: 5,
+        ease: 'Sine.easeInOut',
+      });
+
+      // 3. Overhead speech bubble above Ravi
+      this.showFarmerScoldBubble(ravi);
+    }
+
+    // 4. Play retro angry alert sound
+    sound.playAngryAlert();
+
+    // 5. If directly walking across crop beds, gentle physical pushback away from crop center
+    if (isOnCropBeds) {
+      const centerX = 620;
+      const centerY = 840;
+      const pDx = this.player.x - centerX;
+      const pDy = this.player.y - centerY;
+      const dist = Math.hypot(pDx, pDy) || 1;
+      this.player.setVelocity((pDx / dist) * 140, (pDy / dist) * 140);
+    }
+
+    // 6. Get next scold line and dispatch event to UI for subtitles and audio
+    const scold = getNextFarmerScold();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('jeeva:farmer-scold', {
+          detail: {
+            id: scold.id,
+            hindi: scold.hindi,
+            english: scold.english,
+            audioUrl: scold.audioUrl,
+            playerX: this.player.x,
+            playerY: this.player.y,
+            isOnCropBeds,
+          },
+        })
+      );
+    }
+  }
+
+  private showFarmerScoldBubble(ravi: LiveNPCEntity) {
+    if (this.scoldBubbleContainer) {
+      this.scoldBubbleContainer.destroy();
+      this.scoldBubbleContainer = null;
+    }
+
+    const bx = ravi.sprite.x;
+    const by = ravi.sprite.y - 48;
+
+    const container = this.add.container(bx, by);
+    container.setDepth(ravi.sprite.y + 100);
+
+    const bubbleWidth = 148;
+    const bubbleHeight = 30;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x14271A, 0.95);
+    bg.lineStyle(2, 0xF4D477, 1);
+    bg.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 6);
+    bg.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 6);
+
+    const text = this.add.text(0, 0, '💢 खेत से बाहर निकलो!', {
+      fontFamily: 'Pixelify Sans, monospace',
+      fontSize: '11px',
+      color: '#FFFDF5',
+      align: 'center',
+    }).setOrigin(0.5);
+
+    container.add([bg, text]);
+    container.setScale(0.7);
+    container.setAlpha(0);
+
+    this.tweens.add({
+      targets: container,
+      scaleX: 1,
+      scaleY: 1,
+      alpha: 1,
+      duration: 180,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        this.time.delayedCall(3000, () => {
+          if (container && container.active) {
+            this.tweens.add({
+              targets: container,
+              alpha: 0,
+              y: by - 12,
+              duration: 350,
+              ease: 'Sine.easeIn',
+              onComplete: () => container.destroy(),
+            });
+          }
+        });
+      },
+    });
+
+    this.scoldBubbleContainer = container;
   }
 }

@@ -1,6 +1,6 @@
 /**
  * NPC World Location & Building Residence Manager
- * Controls whether NPCs (Priya, Dev, Arjun) are inside their respective buildings
+ * Controls whether NPCs (Priya, Dev, Arjun, Dr. Meera) are inside their respective buildings
  * or roaming/following the player outside in the village.
  */
 
@@ -10,19 +10,40 @@ export const RESIDENT_NPC_BUILDINGS: Record<string, NPCLocationId> = {
   priya_wife: 'player_home',
   dev_shopkeeper: 'shop',
   arjun_mechanic: 'workshop',
+  meera_doctor: 'hospital',
 };
 
-export const STORAGE_NPC_LOCATIONS_KEY = 'jeeva_npc_locations_v1';
+export const STORAGE_NPC_LOCATIONS_KEY = 'jeeva_npc_locations_v2';
 
 export function getNpcLocations(): Record<string, NPCLocationId> {
   if (typeof window === 'undefined') {
     return { ...RESIDENT_NPC_BUILDINGS };
   }
   try {
-    const raw = localStorage.getItem(STORAGE_NPC_LOCATIONS_KEY);
-    if (!raw) return { ...RESIDENT_NPC_BUILDINGS };
+    let raw = localStorage.getItem(STORAGE_NPC_LOCATIONS_KEY);
+    if (!raw) {
+      const v1 = localStorage.getItem('jeeva_npc_locations_v1');
+      if (v1) {
+        try {
+          const parsedV1 = JSON.parse(v1);
+          const migrated: Record<string, NPCLocationId> = { ...RESIDENT_NPC_BUILDINGS, ...parsedV1 };
+          if (!parsedV1.meera_doctor || parsedV1.meera_doctor === 'village') {
+            migrated.meera_doctor = 'hospital';
+          }
+          localStorage.setItem(STORAGE_NPC_LOCATIONS_KEY, JSON.stringify(migrated));
+          return migrated;
+        } catch {
+          // ignore parsing error and fallback
+        }
+      }
+      return { ...RESIDENT_NPC_BUILDINGS };
+    }
     const parsed = JSON.parse(raw);
-    return { ...RESIDENT_NPC_BUILDINGS, ...parsed };
+    const result: Record<string, NPCLocationId> = { ...RESIDENT_NPC_BUILDINGS, ...parsed };
+    if (!parsed.meera_doctor) {
+      result.meera_doctor = 'hospital';
+    }
+    return result;
   } catch {
     return { ...RESIDENT_NPC_BUILDINGS };
   }
