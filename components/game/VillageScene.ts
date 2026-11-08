@@ -462,28 +462,37 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private spawnFarmland() {
-    const cropPositions = [
-      { x: 540, y: 800, f: 0 },
-      { x: 580, y: 800, f: 1 },
-      { x: 620, y: 800, f: 2 },
-      { x: 660, y: 800, f: 3 },
-      { x: 700, y: 800, f: 0 },
-      { x: 540, y: 840, f: 1 },
-      { x: 580, y: 840, f: 2 },
-      { x: 620, y: 840, f: 3 },
-      { x: 660, y: 840, f: 0 },
-      { x: 700, y: 840, f: 1 },
-      { x: 540, y: 880, f: 2 },
-      { x: 580, y: 880, f: 3 },
-      { x: 620, y: 880, f: 0 },
-      { x: 660, y: 880, f: 1 },
-      { x: 700, y: 880, f: 2 },
+    // Farm grid spans col 15..24 (10 columns) and row 24..31 (8 rows) on the 32x32 tilemap.
+    // Each column represents an agricultural crop furrow with diverse varieties and growth stages.
+    const columnCropTypes = [
+      [0, 2, 0, 1, 2, 0, 2, 0],          // Col 15: Carrots & orange root crops
+      [18, 19, 12, 18, 19, 12, 18, 19], // Col 16: Cabbages & leafy greens
+      [3, 10, 14, 3, 10, 14, 3, 10],    // Col 17: Red tomatoes & peppers
+      [5, 9, 6, 5, 8, 9, 5, 9],          // Col 18: Turnips & radishes
+      [25, 13, 29, 25, 13, 29, 25, 13], // Col 19: Flowering crops & pumpkins
+      [0, 1, 2, 0, 2, 0, 1, 2],          // Col 20: Young & mature carrots
+      [10, 14, 3, 10, 14, 3, 10, 14],   // Col 21: Bush tomatoes & berries
+      [18, 24, 19, 18, 24, 12, 19, 18], // Col 22: Hearty cabbages & lettuces
+      [5, 6, 9, 8, 5, 9, 6, 5],          // Col 23: Farm beets & greens
+      [25, 29, 13, 25, 29, 13, 25, 29], // Col 24: Flowering vegetables & squash
     ];
 
-    for (const crop of cropPositions) {
-      const plant = this.add.sprite(crop.x, crop.y, 'farm_plants', crop.f);
-      plant.setOrigin(0.5, 0.5);
-      plant.setDepth(crop.y);
+    const colStart = 15;
+    const rowStart = 24;
+
+    for (let c = 0; c < columnCropTypes.length; c++) {
+      const col = colStart + c;
+      const x = col * 32 + 16; // Center of 32px tile
+
+      for (let r = 0; r < columnCropTypes[c].length; r++) {
+        const row = rowStart + r;
+        const y = row * 32 + 16; // Center of 32px tile
+        const frame = columnCropTypes[c][r];
+
+        const plant = this.add.sprite(x, y, 'farm_plants', frame);
+        plant.setOrigin(0.5, 0.5);
+        plant.setDepth(y);
+      }
     }
   }
 
@@ -613,9 +622,9 @@ export class VillageScene extends Phaser.Scene {
         id: 'farm_crops_node',
         name: 'Crop Fields',
         type: 'resource',
-        x: 625,
-        y: 860,
-        radius: 64,
+        x: 640,
+        y: 896,
+        radius: 96,
         title: 'Lush Vegetable Rows',
         description: 'Organic carrots, cabbages, and pumpkins thriving in fertilized soil.',
         actionLabel: 'Inspect Crops',

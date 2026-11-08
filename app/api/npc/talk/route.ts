@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { getNPCTraits, generateNPCDialogue } from '@/lib/npcDialogue';
-import { transcribeAudio, synthesizeSpeech, normalizeLanguageCode } from '@/lib/gnani';
+import {
+  transcribeAudio,
+  synthesizeSpeech,
+  normalizeLanguageCode,
+  detectLanguageWithAI,
+} from '@/lib/gnani';
 import {
   getNPCFullMemoryContext,
   processDialogueMem0Lifecycle,
@@ -122,11 +127,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Normalize and auto-detect the language
-    const resolvedLanguage = normalizeLanguageCode(
-      detectedLang !== 'auto' ? detectedLang : undefined,
-      transcribedText
-    );
+    // Normalize and auto-detect the language accurately using AI & heuristics
+    let resolvedLanguage: string;
+    if (detectedLang && detectedLang !== 'auto' && detectedLang !== 'indic-auto') {
+      resolvedLanguage = normalizeLanguageCode(detectedLang, transcribedText);
+    } else {
+      resolvedLanguage = await detectLanguageWithAI(transcribedText);
+    }
 
     // 2. Resolve Active Player Identity (Session or Request or Default Player)
     const session = await getServerSession(authOptions);
@@ -219,6 +226,7 @@ export async function POST(req: NextRequest) {
             itemId: dialogueResult.toolCall.itemId,
             itemName: dialogueResult.toolCall.itemName,
             price: dialogueResult.toolCall.price,
+            quantity: dialogueResult.toolCall.quantity || 1,
           }
         : null,
       apiDetails: {

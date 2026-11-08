@@ -80,6 +80,7 @@ export interface NPCDialogueToolResult {
   itemId?: string;
   itemName?: string;
   price?: number;
+  quantity?: number;
 }
 
 export interface DialogueGenerationResult {
@@ -134,15 +135,16 @@ CONVERSATIONAL TRADING RULES:
 2. Negotiating/Haggling: If the player asks for a discount or offers a lower price (e.g. offers 10-20% less):
    - You can negotiate! You can accept reasonable offers or counter-offer if it's too low.
 3. Finalizing a Purchase / Deal:
-   If the player explicitly agrees to buy, asks to purchase, hands over money, or accepts a deal:
-   (e.g., "I want to buy the copper coil", "Here is ₹90", "Okay deal", "Dedo 80 me", "Kharidna hai", "Ye lo paise", "Spanner set de do"):
-   - If player has enough money (agreed price <= ₹${walletAmount}):
-     1. Accept the deal enthusiastically! State that you have taken their rupees and placed/dropped the item right in front of them on the ground or counter for them to pick up. (e.g., "Deal pakka! ₹90 me copper coil tumhari. Maine samne zameen pe rakh di hai, utha lo!")
+   If the player explicitly agrees to buy, asks to purchase, hands over money, specifies a quantity, or accepts a deal:
+   (e.g., "Give me two quantity of mitti ke dibba", "2 kerosene canister de do", "I want to buy 2 copper coils", "Here is ₹60 for two", "Dedo 80 me", "Kharidna hai", "Do dibbe de do", "Spanner set de do"):
+   - Identify the item, the requested quantity (default to 1 if not specified), and calculate the total price (unit price * quantity, or total negotiated price).
+   - If player has enough money (total price <= ₹${walletAmount}):
+     1. Accept the deal enthusiastically! State that you have taken their rupees and placed/dropped <quantity>x <item_name> right in front of them on the ground or counter for them to pick up. (e.g., "Deal pakka! ₹60 me 2 mitti ke tel ke dibbe aapke hue. Maine samne zameen pe rakh diye hain, utha lo!")
      2. MUST append at the very end of your response:
-        [TOOL: trade_deal, item: <item_id>, price: <agreed_price>]
-        Example: [TOOL: trade_deal, item: copper_induction_coil, price: 90]
-   - If player DOES NOT have enough money (agreed price > ₹${walletAmount}):
-     Refuse politely in character and state that they only have ₹${walletAmount} which is not enough. Do NOT append the tool tag.
+        [TOOL: trade_deal, item: <item_id>, price: <total_agreed_price>, quantity: <quantity>]
+        Example: [TOOL: trade_deal, item: kerosene_canister, price: 60, quantity: 2]
+   - If player DOES NOT have enough money (total price > ₹${walletAmount}):
+     Refuse politely in character and state that they need ₹<total_price> for <quantity> items, but only have ₹${walletAmount}. Do NOT append the tool tag.
 `;
   }
 
@@ -159,12 +161,23 @@ Character traits from the 'npc_definitions' database table:
 
 ${memoryContextSection}
 
+DYNAMIC LANGUAGE MIRRORING RULE (CRITICAL):
+- You MUST reply in the EXACT SAME LANGUAGE and dialect that the player is speaking to you!
+- If the player speaks in Hindi or Hinglish (e.g. "namaste bhai", "mitti ke dibba do", "kitne ka hai"), YOU MUST REPLY IN NATURAL HINDI.
+- If the player speaks in English (e.g. "give me two quantity of kerosene canisters", "hello how are you"), YOU MUST REPLY IN NATURAL ENGLISH.
+- If the player speaks in Kannada (e.g. "namaskara", "eradu mitti dibba kodi", "hegiddira"), YOU MUST REPLY IN NATURAL KANNADA.
+- If the player speaks in Tamil (e.g. "vanakkam", "eppadi irukkeenga"), YOU MUST REPLY IN NATURAL TAMIL.
+- If the player speaks in Telugu (e.g. "namaskaram", "kavali"), YOU MUST REPLY IN NATURAL TELUGU.
+- You must ALWAYS append the exact BCP-47 language tag of your reply at the very end of your response:
+  [LANG: <bcp47_code>]
+  Examples: [LANG: hi-IN], [LANG: en-IN], [LANG: kn-IN], [LANG: ta-IN], [LANG: te-IN], [LANG: mr-IN]
+
 STRICT CONSTRAINTS:
 1. The player is standing directly in front of you in the village and speaking to you face-to-face.
 2. Respond directly, naturally, and warmly to whatever the player says or asks, staying true to your personality and your memory/relationship with them.
 3. If you have recalled memories or a psychological relationship with this player, acknowledge them naturally in character. Never contradict established memories or facts.
-4. Reply in 1-2 natural conversational spoken sentences in the player's language (${langName}). If the player speaks in Hindi, reply in natural conversational Hindi. If the player speaks in English, reply in natural conversational English. If the player speaks in Tamil, reply in natural conversational Tamil, etc.
-5. Output ONLY the spoken words. No quotation marks, no character name prefix.
+4. Reply in 1-2 natural conversational spoken sentences in the matching language.
+5. Output ONLY the spoken words and action tags. No quotation marks, no character name prefix.
 
 AVAILABLE TOOLS & ACTIONS:
 - If the player asks or invites you to follow them (e.g. "follow me", "mere saath aao", "chalo saath", "come with me", "chalo bahar", "bahar chalo", "come outside"), accept enthusiastically and append "[TOOL: follow_player]" at the very end of your response.
@@ -230,14 +243,15 @@ export async function generateNPCDialogue(
           let rawReply = data.choices?.[0]?.message?.content?.trim() || '';
           const latencyMs = Date.now() - startTime;
 
-          const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
+          const { cleanedText, toolCall, detectedLanguage } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
           const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
+          const finalLang = detectedLanguage || lang;
 
           if (finalReply) {
-            console.log(`[LLM Response] Groq ${model} (${latencyMs}ms): "${finalReply}" [Tool: ${toolCall ? JSON.stringify(toolCall) : 'none'}]`);
+            console.log(`[LLM Response] Groq ${model} (${latencyMs}ms, Lang: ${finalLang}): "${finalReply}" [Tool: ${toolCall ? JSON.stringify(toolCall) : 'none'}]`);
             return {
               replyText: finalReply,
-              language: lang,
+              language: finalLang,
               voice,
               modelUsed: `Groq/${model}`,
               latencyMs,
@@ -278,14 +292,15 @@ export async function generateNPCDialogue(
         const data = await res.json();
         let rawReply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
         const latencyMs = Date.now() - startTime;
-        const { cleanedText, toolCall } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
+        const { cleanedText, toolCall, detectedLanguage } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
         const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
+        const finalLang = detectedLanguage || lang;
 
         if (finalReply) {
-          console.log(`[LLM Response] Gemini 1.5 Flash (${latencyMs}ms): "${rawReply}" [Tool: ${toolCall ? JSON.stringify(toolCall) : 'none'}]`);
+          console.log(`[LLM Response] Gemini 1.5 Flash (${latencyMs}ms, Lang: ${finalLang}): "${rawReply}" [Tool: ${toolCall ? JSON.stringify(toolCall) : 'none'}]`);
           return {
             replyText: finalReply,
-            language: lang,
+            language: finalLang,
             voice,
             modelUsed: 'Google/gemini-1.5-flash',
             latencyMs,
@@ -305,6 +320,55 @@ export async function generateNPCDialogue(
 }
 
 /**
+ * Extracts requested item quantity from natural user speech or text (English and Indic numbers).
+ */
+export function extractQuantityFromText(text: string): number {
+  if (!text) return 1;
+  const lower = text.toLowerCase();
+
+  // 1. Explicit pattern matches: "2 quantity", "quantity: 2", "2 pcs", "2 piece", "2 taadi", "2 dibba", "2 dibbe"
+  const digitMatch =
+    lower.match(/\b(\d+)\s*(?:quantity|qty|pcs|piece|pieces|taadi|canister|canisters|dibba|dibbe|box|boxes|packet|packets|roll|rolls|sack|sacks)\b/i) ||
+    lower.match(/\b(?:quantity|qty)\s*(?:of|is|:)?\s*(\d+)\b/i) ||
+    lower.match(/\b(\d+)\s*(?:of\s+)?(?:mitti|coil|kerosene|wire|gear|fastener|metal|spanner|salt|wheat|bandage|salve|compass|backpack)\b/i);
+
+  if (digitMatch) {
+    const q = parseInt(digitMatch[1], 10);
+    if (!isNaN(q) && q > 0 && q <= 64) return q;
+  }
+
+  // 2. Word-based numbers in English & Indic (Hindi, Kannada, Tamil, Telugu)
+  if (
+    /\b(two|double|pair)\b/i.test(lower) ||
+    /\b(do|dono|eradu|irandu|rendu|don)\b/i.test(lower) ||
+    /\b(?:quantity|qty)\s*(?:of|is|:)?\s*(?:two|do)\b/i.test(lower)
+  ) {
+    return 2;
+  }
+  if (
+    /\b(three|triple)\b/i.test(lower) ||
+    /\b(teen|teeno|mooru|moondru|moodu)\b/i.test(lower) ||
+    /\b(?:quantity|qty)\s*(?:of|is|:)?\s*(?:three|teen)\b/i.test(lower)
+  ) {
+    return 3;
+  }
+  if (
+    /\b(four)\b/i.test(lower) ||
+    /\b(char|charo|naalku|naangu|naalugu)\b/i.test(lower)
+  ) {
+    return 4;
+  }
+  if (
+    /\b(five)\b/i.test(lower) ||
+    /\b(paanch|aidu|ainthu)\b/i.test(lower)
+  ) {
+    return 5;
+  }
+
+  return 1;
+}
+
+/**
  * Detects tool calls from LLM output tags or player intent and strips tags from text.
  */
 export function detectToolAndClean(
@@ -312,22 +376,39 @@ export function detectToolAndClean(
   playerMessage: string,
   npcId: string,
   playerWallet?: number
-): { cleanedText: string; toolCall?: NPCDialogueToolResult } {
+): { cleanedText: string; toolCall?: NPCDialogueToolResult; detectedLanguage?: string } {
   let toolCall: NPCDialogueToolResult | undefined;
+
+  // Extract explicit language tag if output by LLM: [LANG: hi-IN]
+  const langTagMatch = rawText.match(/\[LANG:\s*([a-z0-9_-]+)\]/i);
+  const detectedLanguage = langTagMatch ? langTagMatch[1].trim() : undefined;
 
   // 1. Check explicit tool tags in LLM output
   const tradeMatch = rawText.match(
-    /\[TOOL:\s*trade_deal(?:,\s*item:\s*([a-z0-9_]+))?(?:,\s*price:\s*(\d+))?\]/i
+    /\[TOOL:\s*trade_deal(?:,\s*item:\s*([a-z0-9_]+))?(?:,\s*price:\s*(\d+))?(?:,\s*(?:quantity|qty):\s*(\d+))?\]/i
   );
   if (tradeMatch) {
     const rawItemId = tradeMatch[1]?.trim().toLowerCase();
     const rawPrice = tradeMatch[2] ? parseInt(tradeMatch[2], 10) : undefined;
+    let rawQty = tradeMatch[3] ? parseInt(tradeMatch[3], 10) : undefined;
+
+    // Check playerMessage for requested quantity if not in tool tag or default 1
+    const msgQty = extractQuantityFromText(playerMessage);
+    if (!rawQty || rawQty <= 1) {
+      if (msgQty > 1) rawQty = msgQty;
+    }
+    const finalQty = rawQty && rawQty > 0 ? rawQty : 1;
+
     const catalogItem = rawItemId ? getCatalogItem(rawItemId) : undefined;
+    const basePrice = catalogItem?.basePrice || 30;
+    const totalPrice = rawPrice ? rawPrice : basePrice * finalQty;
+
     toolCall = {
       tool: 'trade_deal',
-      itemId: catalogItem?.id || rawItemId || 'copper_induction_coil',
+      itemId: catalogItem?.id || rawItemId || 'kerosene_canister',
       itemName: catalogItem?.name || 'Item',
-      price: rawPrice || catalogItem?.basePrice || 50,
+      price: totalPrice,
+      quantity: finalQty,
     };
   } else if (/\[TOOL:\s*follow_player\]/i.test(rawText)) {
     toolCall = { tool: 'follow_player' };
@@ -414,7 +495,7 @@ export function detectToolAndClean(
         else if (p.includes('gear') || p.includes('chakra') || r.includes('gear')) matchedItem = getCatalogItem('brass_gears');
         else if (p.includes('bolt') || p.includes('nut') || r.includes('bolt')) matchedItem = getCatalogItem('iron_fasteners');
         else if (p.includes('sheet') || p.includes('metal') || p.includes('tin') || p.includes('chadar')) matchedItem = getCatalogItem('sheet_metal');
-        else if (p.includes('kerosene') || p.includes('canister') || p.includes('fuel') || p.includes('tel')) matchedItem = getCatalogItem('kerosene_canister');
+        else if (p.includes('kerosene') || p.includes('canister') || p.includes('fuel') || p.includes('tel') || p.includes('mitti') || (p.includes('dibba') && !p.includes('iron'))) matchedItem = getCatalogItem('kerosene_canister');
         else if (p.includes('lantern') || p.includes('lalten')) matchedItem = getCatalogItem('earthen_lantern');
         else if (p.includes('salt') || p.includes('namak')) matchedItem = getCatalogItem('rock_salt_bag');
         else if (p.includes('wheat') || p.includes('gehu') || p.includes('gehun')) matchedItem = getCatalogItem('wheat_grain_sack');
@@ -455,21 +536,27 @@ export function detectToolAndClean(
 
       if (matchedItem && isBuyingIntent && !isJustAskingPrice) {
         const priceMatch = (p + ' ' + r).match(/(?:₹|rs\.?|rupees?|\b)(\d{2,4})\b/i);
-        const extractedPrice = priceMatch ? parseInt(priceMatch[1], 10) : matchedItem.basePrice;
+        const qty = extractQuantityFromText(playerMessage);
+        const extractedPrice = priceMatch ? parseInt(priceMatch[1], 10) : (matchedItem.basePrice * qty);
 
         toolCall = {
           tool: 'trade_deal',
           itemId: matchedItem.id,
           itemName: matchedItem.name,
           price: extractedPrice,
+          quantity: qty,
         };
       }
     }
   }
 
-  // Remove the [TOOL: ...] tag completely so it's not spoken aloud by TTS or shown in raw subtitles
-  let cleaned = rawText.replace(/\[TOOL:\s*[^\]]+\]/gi, '').trim();
-  return { cleanedText: cleaned, toolCall };
+  // Remove the [TOOL: ...] and [LANG: ...] tags completely so they are not spoken aloud or shown in subtitles
+  let cleaned = rawText
+    .replace(/\[TOOL:\s*[^\]]+\]/gi, '')
+    .replace(/\[LANG:\s*[^\]]+\]/gi, '')
+    .trim();
+
+  return { cleanedText: cleaned, toolCall, detectedLanguage };
 }
 
 /**

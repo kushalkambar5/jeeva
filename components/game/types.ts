@@ -83,5 +83,6 @@ export interface NPCToolCall {
   itemId?: string;
   itemName?: string;
   price?: number;
+  quantity?: number;
   details?: string;
 }

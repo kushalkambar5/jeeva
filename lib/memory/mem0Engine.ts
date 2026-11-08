@@ -382,6 +382,7 @@ export async function processDialogueMem0Lifecycle(params: {
     itemId?: string;
     itemName?: string;
     price?: number;
+    quantity?: number;
   };
   sessionId?: string;
 }): Promise<void> {
@@ -398,12 +399,13 @@ export async function processDialogueMem0Lifecycle(params: {
   if (toolCall) {
     if (toolCall.tool === 'trade_deal') {
       const itemDesc = toolCall.itemName || toolCall.itemId || 'goods';
-      const eventContent = `Sold ${itemDesc} to the player for ₹${toolCall.price} after bargaining.`;
+      const qty = typeof toolCall.quantity === 'number' && toolCall.quantity > 0 ? toolCall.quantity : 1;
+      const eventContent = `Sold ${qty > 1 ? `${qty}x ` : ''}${itemDesc} to the player for ₹${toolCall.price} after bargaining.`;
       await recordEpisodicEvent(userId, npcId, {
         content: eventContent,
         importance: 8,
         emotionalValence: 25,
-        metadata: { tool: 'trade_deal', item: toolCall.itemId, price: toolCall.price },
+        metadata: { tool: 'trade_deal', item: toolCall.itemId, price: toolCall.price, quantity: qty },
         sessionId,
       });
 

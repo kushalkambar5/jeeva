@@ -15,8 +15,6 @@ import {
   Clock,
   Play,
   Pause,
-  Sun,
-  Moon,
   Users,
   Calendar,
   ChevronRight,
@@ -396,11 +394,12 @@ export default function GameTestingCanvas() {
           setTimeout(() => setToolToast(null), 4000);
           sound.playInteractClick();
         } else if (data.toolCall.tool === 'trade_deal') {
-          const { itemId, price, itemName } = data.toolCall;
+          const { itemId, price, itemName, quantity } = data.toolCall;
+          const qty = typeof quantity === 'number' && quantity > 0 ? quantity : 1;
           const currentWallet = loadPlayerWallet();
           const itemCatalog = itemId ? getCatalogItem(itemId) : undefined;
           const resolvedName = itemName || itemCatalog?.name || 'Item';
-          const finalPrice = typeof price === 'number' && price > 0 ? price : (itemCatalog?.basePrice ?? 0);
+          const finalPrice = typeof price === 'number' && price > 0 ? price : ((itemCatalog?.basePrice ?? 0) * qty);
 
           if (currentWallet < finalPrice) {
             sound.playDamageHurt();
@@ -412,11 +411,11 @@ export default function GameTestingCanvas() {
             const dropY = gameState.playerY + 12;
             const currentScene = gameState.isInsideInterior ? (gameState.interiorId || 'shop') : 'village';
 
-            // Drop item into world with 0 delay so player can pick it up immediately
-            addDroppedItem(itemId || 'copper_induction_coil', 1, dropX, dropY, currentScene, 0);
+            // Drop item into world with exact requested quantity so player can pick it up immediately
+            addDroppedItem(itemId || 'kerosene_canister', qty, dropX, dropY, currentScene, 0);
 
             sound.playQuestComplete();
-            setToolToast(`💰 Paid ₹${finalPrice}! ${targetNpc.name} dropped 1x ${resolvedName} on the ground! Walk over to pick it up.`);
+            setToolToast(`💰 Paid ₹${finalPrice}! ${targetNpc.name} dropped ${qty}x ${resolvedName} on the ground! Walk over to pick it up.`);
             setTimeout(() => setToolToast(null), 5000);
           }
         }
@@ -551,11 +550,12 @@ export default function GameTestingCanvas() {
           setTimeout(() => setToolToast(null), 4000);
           sound.playInteractClick();
         } else if (data.toolCall.tool === 'trade_deal') {
-          const { itemId, price, itemName } = data.toolCall;
+          const { itemId, price, itemName, quantity } = data.toolCall;
+          const qty = typeof quantity === 'number' && quantity > 0 ? quantity : 1;
           const currentWallet = loadPlayerWallet();
           const itemCatalog = itemId ? getCatalogItem(itemId) : undefined;
           const resolvedName = itemName || itemCatalog?.name || 'Item';
-          const finalPrice = typeof price === 'number' && price > 0 ? price : (itemCatalog?.basePrice ?? 0);
+          const finalPrice = typeof price === 'number' && price > 0 ? price : ((itemCatalog?.basePrice ?? 0) * qty);
 
           if (currentWallet < finalPrice) {
             sound.playDamageHurt();
@@ -567,9 +567,9 @@ export default function GameTestingCanvas() {
             const dropY = gameState.playerY + 12;
             const currentScene = gameState.isInsideInterior ? (gameState.interiorId || 'shop') : 'village';
 
-            addDroppedItem(itemId || 'copper_induction_coil', 1, dropX, dropY, currentScene, 0);
+            addDroppedItem(itemId || 'kerosene_canister', qty, dropX, dropY, currentScene, 0);
             sound.playQuestComplete();
-            setToolToast(`💰 Paid ₹${finalPrice}! ${targetNpc.name} dropped 1x ${resolvedName} on the ground! Walk over to pick it up.`);
+            setToolToast(`💰 Paid ₹${finalPrice}! ${targetNpc.name} dropped ${qty}x ${resolvedName} on the ground! Walk over to pick it up.`);
             setTimeout(() => setToolToast(null), 5000);
           }
         }
@@ -843,9 +843,6 @@ export default function GameTestingCanvas() {
   const playerMmX = Math.min(Math.max((gameState.playerX / mapWidth) * mmW, 4), mmW - 4);
   const playerMmY = Math.min(Math.max((gameState.playerY / mapHeight) * mmH, 4), mmH - 4);
 
-  const currentMinutes = gameState.gameTimeMinutes ?? 570;
-  const isNight = currentMinutes < 360 || currentMinutes >= 1140; // before 6am or after 7pm
-
   return (
     <div
       ref={containerRef}
@@ -873,35 +870,6 @@ export default function GameTestingCanvas() {
           <span className="font-pixel text-sm font-bold text-[#F4D477] tracking-wider flex items-center gap-1.5">
             <span>JEEVA VILLAGE</span>
           </span>
-        </div>
-
-        {/* Center: In-Game Clock & Schedule Time Control Pill */}
-        <div className="hidden md:flex items-center gap-2.5 pointer-events-auto bg-[#14271A]/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-[#78A85B]/40 shadow-xl">
-          <div className="flex items-center gap-1.5 font-pixel text-xs text-[#F4D477] font-bold">
-            {isNight ? (
-              <Moon className="w-3.5 h-3.5 text-[#75B9D0]" />
-            ) : (
-              <Sun className="w-3.5 h-3.5 text-[#F4D477] animate-spin" />
-            )}
-            <span>{gameState.gameTime || '09:30 AM'}</span>
-          </div>
-
-          <div className="h-3 w-px bg-[#28392E]" />
-
-
-          {/* Time Scrubber Slider */}
-          <div className="flex items-center gap-1.5 w-24">
-            <input
-              type="range"
-              min={0}
-              max={1439}
-              step={15}
-              value={timeSliderValue}
-              onChange={handleTimeSliderChange}
-              title={`Scrub Schedule Time: ${formatMinutesToTime(timeSliderValue)}`}
-              className="w-full h-1 bg-[#1F3B27] accent-[#F4D477] rounded cursor-pointer"
-            />
-          </div>
         </div>
 
         {/* Right: Quick Action Controls Pill */}
