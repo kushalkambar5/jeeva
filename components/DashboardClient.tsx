@@ -101,20 +101,12 @@ export default function DashboardClient({ user }: DashboardClientProps) {
           className="w-full max-w-xl p-8 bg-warmbeige dark:bg-[#16221A] border-4 border-[#3D3429] dark:border-[#78A85B] shadow-[8px_8px_0px_#14271A] text-center space-y-6"
           style={{ imageRendering: "pixelated" }}
         >
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 border-2 border-dashed border-[#3D3429] dark:border-[#78A85B] bg-white/60 dark:bg-black/30 text-xs font-pixel uppercase tracking-widest text-forest dark:text-gold">
-            <Sparkles className="w-3.5 h-3.5 text-gold" />
-            Session Authenticated
-          </div>
 
           {/* Heading */}
           <div className="space-y-2">
             <h1 className="text-3xl sm:text-4xl font-pixel uppercase tracking-wider text-forest dark:text-gold">
               Welcome, {user.name || "Traveler"}!
             </h1>
-            <p className="text-sm font-sans text-mutedbrown dark:text-[#C4D2C3]">
-              Your soul is bound to the village chronicle. Ready to step into Kaveripura?
-            </p>
           </div>
 
           {/* User Details Grid */}

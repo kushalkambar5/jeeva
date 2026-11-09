@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import PixelButton from "./PixelButton";
 import { Mic, Volume2, Play, Pause, Compass, ShieldAlert, Cpu } from "lucide-react";
 
@@ -14,6 +15,7 @@ export default function HeroSection({
   onOpenLogin,
   onOpenSignup,
 }: HeroSectionProps) {
+  const { data: session } = useSession();
   const [activeVoiceSnippet, setActiveVoiceSnippet] = useState<number | null>(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -80,27 +82,55 @@ export default function HeroSection({
           </span>
         </h1>
 
-        {/* Call to Action Buttons: Login & Signup as requested */}
+        {/* Call to Action Buttons: Login/Signup when logged out, Play & Dashboard when logged in */}
         <div className="mt-8 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-          {/* Sign Up Button */}
-          <PixelButton
-            variant="gold"
-            size="lg"
-            onClick={onOpenSignup}
-            ariaLabel="Sign up for Jeeva Alpha"
-            className="w-full sm:w-auto shadow-[4px_4px_0px_#14271A]"
-          >
-            Start Adventure (Sign Up)
-          </PixelButton>
+          {session?.user ? (
+            <>
+              {/* Playable Game Link */}
+              <PixelButton
+                variant="gold"
+                size="lg"
+                href="/play"
+                ariaLabel="Play Jeeva"
+                icon={<Compass className="w-5 h-5 text-darkbrown" />}
+                className="w-full sm:w-auto shadow-[4px_4px_0px_#14271A]"
+              >
+                Play Game
+              </PixelButton>
 
-          {/* Playable Game Link */}
-          <a
-            href="/play"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded bg-[#315B3C] hover:bg-[#78A85B] text-[#FFF8E9] border-2 border-[#14271A] font-pixel text-sm uppercase tracking-wider shadow-[4px_4px_0px_#14271A] transition active:translate-y-0.5 active:shadow-[2px_2px_0px_#14271A]"
-          >
-            <Compass className="w-5 h-5 text-[#F4D477]" />
-            <span>Play Game (/play)</span>
-          </a>
+              <PixelButton
+                variant="forest"
+                size="lg"
+                href="/dashboard"
+                ariaLabel="Go to Dashboard"
+                className="w-full sm:w-auto shadow-[4px_4px_0px_#14271A]"
+              >
+                Dashboard
+              </PixelButton>
+            </>
+          ) : (
+            <>
+              {/* Sign Up Button */}
+              <PixelButton
+                variant="gold"
+                size="lg"
+                onClick={onOpenSignup}
+                ariaLabel="Sign up for Jeeva Alpha"
+                className="w-full sm:w-auto shadow-[4px_4px_0px_#14271A]"
+              >
+                Start Adventure (Sign Up)
+              </PixelButton>
+
+              {/* Playable Game Link */}
+              <a
+                href="/play"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded bg-[#315B3C] hover:bg-[#78A85B] text-[#FFF8E9] border-2 border-[#14271A] font-pixel text-sm uppercase tracking-wider shadow-[4px_4px_0px_#14271A] transition active:translate-y-0.5 active:shadow-[2px_2px_0px_#14271A]"
+              >
+                <Compass className="w-5 h-5 text-[#F4D477]" />
+                <span>Play Game </span>
+              </a>
+            </>
+          )}
         </div>
 
         {/* Gamer Feature Highlights Bar */}

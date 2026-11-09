@@ -131,18 +131,9 @@ export default function CharactersSection() {
         
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 mb-4 border-2 border-[#3D3429] dark:border-[#78A85B] bg-cream dark:bg-[#16221A] shadow-[2px_2px_0px_#14271A]">
-            <Users className="w-4 h-4 text-forest dark:text-gold" />
-            <span className="text-xs font-pixel uppercase tracking-widest text-forest dark:text-gold font-bold">
-              Meet the Residents
-            </span>
-          </div>
           <h2 className="text-3xl sm:text-5xl font-pixel uppercase tracking-tight text-darkbrown dark:text-cream leading-tight">
             Distinct Minds. Deep Motives. Real Personalities.
           </h2>
-          <p className="mt-4 text-base sm:text-lg font-sans text-mutedbrown dark:text-[#BAC9B9] leading-relaxed">
-            Every villager possesses independent memories, daily routines, social alliances, and an authentic regional voice.
-          </p>
         </div>
 
         {/* Character Selection Carousel / Grid */}

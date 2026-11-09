@@ -104,19 +104,9 @@ export default function WorldSection() {
         
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 mb-4 border-2 border-[#3D3429] dark:border-[#78A85B] bg-warmbeige dark:bg-[#16221A] shadow-[2px_2px_0px_#14271A]">
-            <Compass className="w-4 h-4 text-forest dark:text-gold" />
-            <span className="text-xs font-pixel uppercase tracking-widest text-forest dark:text-gold font-bold">
-              The Handcrafted World
-            </span>
-          </div>
           <h2 className="text-3xl sm:text-5xl font-pixel uppercase tracking-tight text-darkbrown dark:text-cream leading-tight">
             Discover the Village of Jeeva
           </h2>
-          <p className="mt-4 text-base sm:text-lg font-sans text-mutedbrown dark:text-[#BAC9B9] leading-relaxed">
-            Every building has an authentic purpose, handcrafted interiors, and living characters who work, sleep, and
-            react to your deeds.
-          </p>
         </div>
 
         {/* Location Navigation Tabs */}

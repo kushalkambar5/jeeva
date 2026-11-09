@@ -75,18 +75,9 @@ export default function FeaturesSection() {
         
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 mb-4 border-2 border-[#3D3429] dark:border-[#78A85B] bg-cream dark:bg-[#16221A] shadow-[2px_2px_0px_#14271A]">
-            <span className="text-xs font-pixel uppercase tracking-widest text-forest dark:text-gold font-bold">
-              Unbeatable AI Features
-            </span>
-          </div>
           <h2 className="text-3xl sm:text-5xl font-pixel uppercase tracking-tight text-darkbrown dark:text-cream leading-tight">
             Why Jeeva is Unlike Any RPG You&apos;ve Ever Played
           </h2>
-          <p className="mt-4 text-base sm:text-lg font-sans text-mutedbrown dark:text-[#BAC9B9] leading-relaxed">
-            Forget scripted dialogue options and mindless cardboard NPCs. We built intelligence directly into the muscles,
-            memories, and vocal cords of every villager.
-          </p>
         </div>
 
         {/* Feature Cards Grid */}
@@ -99,30 +90,17 @@ export default function FeaturesSection() {
                 className={`relative p-6 sm:p-7 bg-cream dark:bg-[#18261E] border-3 ${feat.accent} shadow-[6px_6px_0px_#14271A] flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-200`}
               >
                 <div>
-                  {/* Top Badge & Icon */}
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="px-2.5 py-0.5 text-xs font-pixel uppercase tracking-wider bg-forest/10 dark:bg-forest/40 text-forest dark:text-gold border border-forest/30 font-bold">
-                      {feat.badge}
-                    </span>
+                  {/* Top Icon */}
+                  <div className="flex items-center justify-end mb-4">
                     <div className="p-2 border-2 border-[#3D3429] dark:border-[#78A85B] bg-white dark:bg-[#111A14]">
                       <Icon className="w-5 h-5 text-forest dark:text-gold" />
                     </div>
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-xl font-pixel uppercase tracking-wide text-darkbrown dark:text-cream leading-snug mb-3">
+                  <h3 className="text-xl font-pixel uppercase tracking-wide text-darkbrown dark:text-cream leading-snug">
                     {feat.title}
                   </h3>
-
-                  {/* Description */}
-                  <p className="text-sm font-sans text-mutedbrown dark:text-[#C5D5C4] leading-relaxed mb-4">
-                    {feat.description}
-                  </p>
-                </div>
-
-                {/* Gamer Highlight Box */}
-                <div className="pt-3 border-t-2 border-dashed border-[#6F6657]/30 text-xs font-sans italic text-forest dark:text-gold bg-mint/40 dark:bg-black/20 p-2.5 border-l-3 border-forest dark:border-gold">
-                  &ldquo;{feat.gamerQuote}&rdquo;
                 </div>
               </div>
             );

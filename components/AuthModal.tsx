@@ -135,7 +135,7 @@ export default function AuthModal({
                 : "text-darkbrown dark:text-cream/70 hover:bg-forest/20"
             }`}
           >
-            Village Login
+            Login
           </button>
           <button
             type="button"
@@ -149,7 +149,7 @@ export default function AuthModal({
                 : "text-darkbrown dark:text-cream/70 hover:bg-forest/20"
             }`}
           >
-            Join Closed Alpha
+            Register
           </button>
         </div>
 
