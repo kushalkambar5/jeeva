@@ -22,7 +22,6 @@ export default function Navbar({ onOpenLogin }: NavbarProps) {
     { name: "Features", href: "#features" },
     { name: "The World", href: "#world" },
     { name: "Characters", href: "#characters" },
-    { name: "Gameplay", href: "#gameplay" },
     { name: "Story", href: "#story" },
   ];
 

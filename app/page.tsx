@@ -6,7 +6,6 @@ import HeroSection from "@/components/HeroSection";
 import FeaturesSection from "@/components/FeaturesSection";
 import WorldSection from "@/components/WorldSection";
 import CharactersSection from "@/components/CharactersSection";
-import GameplaySection from "@/components/GameplaySection";
 import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
@@ -51,10 +50,7 @@ export default function Home() {
         {/* 4. Meet the Characters Section (animated character sprites & lore) */}
         <CharactersSection />
 
-        {/* 5. Experience the Gameplay Section (Answers: What will I actually do when I play?) */}
-        <GameplaySection />
-
-        {/* 6. Call to Action — Start your adventure */}
+        {/* 5. Call to Action — Start your adventure */}
         <CTASection
           onOpenSignup={handleOpenSignup}
           onOpenLogin={handleOpenLogin}
