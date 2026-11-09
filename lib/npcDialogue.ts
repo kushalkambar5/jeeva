@@ -133,14 +133,14 @@ The player currently has ₹${walletAmount} in their wallet.
 
 CRITICAL PRICE NEGOTIATION & THRESHOLD RULES:
 1. Inquiring items/prices:
-   If the player asks what you sell, what items you have, or their prices, describe your wares in character with their standard base prices.
+   If the player asks what you sell, what items you have, or their prices, describe your wares in character with their standard base prices in ${langName}.
 2. STRICT NEGOTIATION RULES & THRESHOLD MINIMUM PRICE POINTS:
    - You must NOT agree to every price point!
    - Every item has an absolute minimum threshold price point (listed above). You cannot and must never sell below this threshold price!
    - STRICT REFUSAL BELOW THRESHOLD:
      If the player asks for, proposes, or negotiates a price that is BELOW your item's minimum threshold price point (e.g. asking for an item for less than its minimum threshold price):
      YOU MUST REFUSE to sell at their offered price point!
-     YOU MUST EXPLICITLY TELL THEM: "I can only reduce the cost till ₹<threshold_price> price." (or in Hindi: "मैं केवल ₹<threshold_price> तक ही दाम कम कर सकता हूँ, इससे कम नहीं।" or corresponding phrase in the player's language).
+     ${requestedLanguage === 'en-IN' ? 'YOU MUST EXPLICITLY TELL THEM IN ENGLISH: "I can only reduce the cost till ₹<threshold_price> price."' : 'YOU MUST EXPLICITLY TELL THEM: "मैं केवल ₹<threshold_price> तक ही दाम कम कर सकता हूँ, इससे कम नहीं।" (or corresponding phrase in ' + langName + ').'}
      DO NOT agree to their low price point! DO NOT output the [TOOL: trade_deal] tag for any price below the threshold!
    - NEGOTIATION AT OR ABOVE THRESHOLD:
      If the player negotiates or offers a price that is AT OR ABOVE your item's minimum threshold price point:
@@ -150,9 +150,10 @@ CRITICAL PRICE NEGOTIATION & THRESHOLD RULES:
    (e.g., "Give me two quantity of mitti ke dibba", "2 kerosene canister de do", "I want to buy 2 copper coils", "Here is ₹60 for two", "Dedo 80 me", "Kharidna hai", "Do dibbe de do", "Spanner set de do"):
    - Identify the item, the requested quantity (default to 1 if not specified), and calculate the total price (unit price * quantity, or total negotiated price).
    - VERIFY PRICE IS AT OR ABOVE THRESHOLD:
-     The unit price MUST be at or above the item's minimum threshold price! If it is below, DO NOT finalize. Refuse and tell them: "I can only reduce the cost till ₹<threshold_price> price."
+     The unit price MUST be at or above the item's minimum threshold price! If it is below, DO NOT finalize. Refuse and state the minimum price.
    - If player has enough money (total price <= ₹${walletAmount}):
-     1. Accept the deal enthusiastically! State that you have taken their rupees and placed/dropped <quantity>x <item_name> right in front of them on the ground or counter for them to pick up. (e.g., "Deal pakka! ₹60 me 2 mitti ke tel ke dibbe aapke hue. Maine samne zameen pe rakh diye hain, utha lo!")
+     1. Accept the deal enthusiastically! State in ${langName} that you have taken their rupees and placed/dropped <quantity>x <item_name> right in front of them on the ground or counter for them to pick up.
+        (e.g., in English: "Deal done! ₹60 for 2 kerosene canisters. I've placed them right on the counter for you, pick them up!" or in Hindi: "Deal pakka! ₹60 me 2 mitti ke tel ke dibbe aapke hue. Maine samne zameen pe rakh diye hain, utha lo!")
      2. MUST append at the very end of your response:
         [TOOL: trade_deal, item: <item_id>, price: <total_agreed_price>, quantity: <quantity>]
         Example: [TOOL: trade_deal, item: kerosene_canister, price: 60, quantity: 2]
@@ -203,7 +204,17 @@ Character traits from the 'npc_definitions' database table:
 - Name: ${traits.name}
 - Role: ${traits.role}
 - Personality Traits: ${traits.personality_traits.join(', ')}
-- Speaking Style: ${traits.speaking_style}
+- Persona and Speaking Tone: ${traits.speaking_style.replace(/\b(in|speaks\s+in)\s+Hindi\b/gi, '$1 colloquial speech')}
+
+CURRENT CONVERSATION LANGUAGE REQUIREMENT:
+- Target Spoken Language: ${langName} (${requestedLanguage})
+- ABSOLUTE REQUIREMENT: You MUST speak and respond in ${langName} (${requestedLanguage})!
+${requestedLanguage === 'en-IN' ? `- PLAYER IS SPEAKING IN ENGLISH: You MUST formulate your entire response in 100% natural, fluent conversational English! DO NOT reply in Hindi, Hinglish, Telugu, Tamil, or any Indic script. Express your character's warmth, attitude, and personality, but express your dialogue purely in English!` : ''}
+${requestedLanguage === 'hi-IN' ? `- PLAYER IS SPEAKING IN HINDI: Reply in authentic conversational Hindi/Hinglish!` : ''}
+${requestedLanguage === 'te-IN' ? `- PLAYER IS SPEAKING IN TELUGU: Reply in authentic conversational Telugu!` : ''}
+${requestedLanguage === 'ta-IN' ? `- PLAYER IS SPEAKING IN TAMIL: Reply in authentic conversational Tamil!` : ''}
+${requestedLanguage === 'kn-IN' ? `- PLAYER IS SPEAKING IN KANNADA: Reply in authentic conversational Kannada!` : ''}
+${requestedLanguage === 'mr-IN' ? `- PLAYER IS SPEAKING IN MARATHI: Reply in authentic conversational Marathi!` : ''}
 
 ${priyaWifeSection}
 ${merchantSection}
@@ -233,14 +244,14 @@ TALK LIKE A REAL HUMAN (AVOID ROBOTIC AI-GENERATED TEXT):
   * React with real human emotion—warmth, humor, teasing, frustration, impatience, pride, or curiosity.
 
 DYNAMIC LANGUAGE MIRRORING RULE (CRITICAL):
-- You MUST reply in the EXACT SAME LANGUAGE and dialect that the player is speaking to you!
-- If the player speaks in Hindi or Hinglish (e.g. "namaste bhai", "mitti ke dibba do", "kitne ka hai"), YOU MUST REPLY IN NATURAL HINDI.
-- If the player speaks in English (e.g. "give me two quantity of kerosene canisters", "hello how are you"), YOU MUST REPLY IN NATURAL ENGLISH.
-- If the player speaks in Kannada (e.g. "namaskara", "eradu mitti dibba kodi", "hegiddira"), YOU MUST REPLY IN NATURAL KANNADA.
-- If the player speaks in Tamil (e.g. "vanakkam", "eppadi irukkeenga"), YOU MUST REPLY IN NATURAL TAMIL.
-- If the player speaks in Telugu (e.g. "namaskaram", "kavali"), YOU MUST REPLY IN NATURAL TELUGU.
+- You MUST reply in the EXACT SAME LANGUAGE and dialect that the player is speaking to you (${langName})!
+- If the player speaks in English: YOU MUST REPLY IN NATURAL ENGLISH (DO NOT use Hindi, Telugu, Tamil, or other languages!).
+- If the player speaks in Hindi or Hinglish: YOU MUST REPLY IN NATURAL HINDI.
+- If the player speaks in Kannada: YOU MUST REPLY IN NATURAL KANNADA.
+- If the player speaks in Tamil: YOU MUST REPLY IN NATURAL TAMIL.
+- If the player speaks in Telugu: YOU MUST REPLY IN NATURAL TELUGU.
 - You must ALWAYS append the exact BCP-47 language tag of your reply at the very end of your response:
-  [LANG: <bcp47_code>]
+  [LANG: ${requestedLanguage}]
   Examples: [LANG: hi-IN], [LANG: en-IN], [LANG: kn-IN], [LANG: ta-IN], [LANG: te-IN], [LANG: mr-IN]
 
 STRICT CONSTRAINTS:
@@ -277,8 +288,8 @@ export async function generateNPCDialogue(
   // 1. Dynamic LLM Generation via Groq (Ultra-low latency, flagship multilingual Indic support)
   const groqApiKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : '';
   if (groqApiKey) {
-    // Flagship 120B reasoning model first (flawless Indic languages), then 27B fallback
-    const groqModels = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
+    // Flagship and high-throughput conversational models
+    const groqModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
     for (const model of groqModels) {
       const startTime = Date.now();
@@ -313,7 +324,7 @@ export async function generateNPCDialogue(
           let rawReply = data.choices?.[0]?.message?.content?.trim() || '';
           const latencyMs = Date.now() - startTime;
 
-          const { cleanedText, toolCall, detectedLanguage } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
+          const { cleanedText, toolCall, detectedLanguage } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet, lang);
           const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
           const finalLang = detectedLanguage || lang;
 
@@ -330,6 +341,10 @@ export async function generateNPCDialogue(
           }
         } else {
           console.warn(`Groq model ${model} failed (${response.status}):`, await response.text());
+          if (response.status === 429) {
+            // Briefly pause before attempting next model fallback to respect rate limits
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+          }
         }
       } catch (err) {
         console.warn(`Error calling Groq model ${model}:`, err);
@@ -362,7 +377,7 @@ export async function generateNPCDialogue(
         const data = await res.json();
         let rawReply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
         const latencyMs = Date.now() - startTime;
-        const { cleanedText, toolCall, detectedLanguage } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet);
+        const { cleanedText, toolCall, detectedLanguage } = detectToolAndClean(rawReply, playerMessage, traits.id, playerWallet, lang);
         const finalReply = cleanSpokenDialogue(cleanedText, traits.name);
         const finalLang = detectedLanguage || lang;
 
@@ -446,13 +461,14 @@ export function detectToolAndClean(
   rawText: string,
   playerMessage: string,
   npcId: string,
-  playerWallet?: number
+  playerWallet?: number,
+  targetLanguage?: string
 ): { cleanedText: string; toolCall?: NPCDialogueToolResult; detectedLanguage?: string } {
   let toolCall: NPCDialogueToolResult | undefined;
 
   // Extract explicit language tag if output by LLM: [LANG: hi-IN]
   const langTagMatch = rawText.match(/\[LANG:\s*([a-z0-9_-]+)\]/i);
-  const detectedLanguage = langTagMatch ? langTagMatch[1].trim() : undefined;
+  const detectedLanguage = langTagMatch ? langTagMatch[1].trim() : targetLanguage;
 
   // 1. Check explicit tool tags in LLM output
   const tradeMatch = rawText.match(
@@ -629,7 +645,8 @@ export function detectToolAndClean(
 
         if (extractedPrice < totalMinThreshold) {
           toolCall = undefined;
-          const isHindi = detectedLanguage?.startsWith('hi') || /[\u0900-\u097F]/.test(rawText) || /[\u0900-\u097F]/.test(playerMessage);
+          const isEnglish = (targetLanguage || detectedLanguage)?.startsWith('en');
+          const isHindi = !isEnglish && (targetLanguage?.startsWith('hi') || detectedLanguage?.startsWith('hi') || /[\u0900-\u097F]/.test(rawText) || /[\u0900-\u097F]/.test(playerMessage));
           rawText = isHindi
             ? `मैं केवल ₹${totalMinThreshold} तक ही दाम कम कर सकता हूँ। इससे कम में नहीं हो पाएगा।`
             : `I can only reduce the cost till ₹${totalMinThreshold} price. Below that, I cannot sell.`;
@@ -680,7 +697,8 @@ export function detectToolAndClean(
             r.includes(thresholdUnit.toString());
 
           if (!alreadyHasLimitNotice) {
-            const isHindi = detectedLanguage?.startsWith('hi') || /[\u0900-\u097F]/.test(rawText) || /[\u0900-\u097F]/.test(playerMessage);
+            const isEnglish = (targetLanguage || detectedLanguage)?.startsWith('en');
+            const isHindi = !isEnglish && (targetLanguage?.startsWith('hi') || detectedLanguage?.startsWith('hi') || /[\u0900-\u097F]/.test(rawText) || /[\u0900-\u097F]/.test(playerMessage));
             rawText = isHindi
               ? `मैं केवल ₹${totalThreshold} तक ही दाम कम कर सकता हूँ। इससे कम में नहीं हो पाएगा।`
               : `I can only reduce the cost till ₹${totalThreshold} price. Below that, I cannot sell.`;
@@ -710,11 +728,14 @@ export function detectToolAndClean(
       rawText.includes('बीवी हूं');
 
     if (!statesHuman) {
+      const isEnglish = (targetLanguage || detectedLanguage)?.startsWith('en');
       const isHindi =
-        detectedLanguage?.startsWith('hi') ||
-        /[\u0900-\u097F]/.test(rawText) ||
-        /[\u0900-\u097F]/.test(playerMessage) ||
-        /\b(kya|tum|ho|hai|bhai|yaar|nahi|na|main|batao|suno)\b/i.test(playerMessage);
+        !isEnglish && (
+          targetLanguage?.startsWith('hi') ||
+          detectedLanguage?.startsWith('hi') ||
+          /[\u0900-\u097F]/.test(rawText) ||
+          /[\u0900-\u097F]/.test(playerMessage)
+        );
 
       if (npcId === 'priya_wife') {
         rawText = isHindi

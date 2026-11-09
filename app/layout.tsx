@@ -20,8 +20,11 @@ export const metadata: Metadata = {
   title: "JEEVA | The Living AI Village RPG",
   description: "Step into an Indian village where NPCs have minds, memories, voices, and grounded autonomy. Speak in your tongue and watch your words physically shape the world.",
   icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/logo.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
     apple: "/logo.png",
   },
 };

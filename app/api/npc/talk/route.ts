@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Process Voice Input via Gnani STT (if audio was uploaded)
     let transcribedText = messageText;
-    let detectedLang = language;
+    let sttDetectedLang: string | undefined;
 
     if (audioFile) {
       const audioBytes = await audioFile.arrayBuffer();
@@ -100,9 +100,7 @@ export async function POST(req: NextRequest) {
 
       if (sttResult.success && sttResult.transcript && sttResult.transcript.trim()) {
         transcribedText = sttResult.transcript.trim();
-        if (sttResult.detectedLanguage) {
-          detectedLang = sttResult.detectedLanguage;
-        }
+        sttDetectedLang = sttResult.detectedLanguage;
       } else {
         console.warn('STT could not transcribe audio:', sttResult.error);
         if (!transcribedText) {
@@ -127,13 +125,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Normalize and auto-detect the language accurately using AI & heuristics
+    // Resolve Player Spoken/Written Language accurately:
+    // If the player explicitly selected a specific target language (not 'auto' / 'indic-auto'), respect it.
+    // In 'auto' mode (the default for voice chat and exploration), dynamically classify the player's actual words!
     let resolvedLanguage: string;
-    if (detectedLang && detectedLang !== 'auto' && detectedLang !== 'indic-auto') {
-      resolvedLanguage = normalizeLanguageCode(detectedLang, transcribedText);
+    if (language && language !== 'auto' && language !== 'indic-auto') {
+      resolvedLanguage = normalizeLanguageCode(language, transcribedText);
     } else {
       resolvedLanguage = await detectLanguageWithAI(transcribedText);
     }
+
+    console.log(`[Talk API] Player: "${transcribedText}" | STT Tag: ${sttDetectedLang || 'none'} | Resolved Lang: ${resolvedLanguage}`);
 
     // 2. Resolve Active Player Identity (Session or Request or Default Player)
     const session = await getServerSession(authOptions);

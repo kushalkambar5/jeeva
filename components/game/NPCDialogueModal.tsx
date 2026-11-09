@@ -41,8 +41,9 @@ interface MessageEntry {
 }
 
 const SUPPORTED_LANGUAGES = [
-  { code: 'hi-IN', label: 'हिन्दी (Hindi)' },
+  { code: 'auto', label: '🌐 Auto Detect' },
   { code: 'en-IN', label: 'English' },
+  { code: 'hi-IN', label: 'हिन्दी (Hindi)' },
   { code: 'ta-IN', label: 'தமிழ் (Tamil)' },
   { code: 'te-IN', label: 'తెలుగు (Telugu)' },
   { code: 'kn-IN', label: 'ಕನ್ನಡ (Kannada)' },
@@ -58,9 +59,7 @@ export default function NPCDialogueModal({
   thresholdRadius = 60,
   onClose,
 }: NPCDialogueModalProps) {
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(
-    npc.id === 'priya_wife' ? 'hi-IN' : 'en-IN'
-  );
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('auto');
   const [inputText, setInputText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -477,7 +476,7 @@ export default function NPCDialogueModal({
                   Recording microphone ({recordingSeconds}s)...
                 </span>
                 <span className="text-[10px] text-red-300">
-                  Speak clearly in {selectedLanguage}. Click red button when done.
+                  Speak clearly in your language. Click red button when done.
                 </span>
               </div>
               <div className="flex items-center gap-1">
@@ -558,8 +557,8 @@ export default function NPCDialogueModal({
               onChange={(e) => setInputText(e.target.value)}
               placeholder={
                 isRecording
-                  ? `Recording in ${selectedLanguage}... Click red square to send`
-                  : `Speak or type to ${npc.name} in selected language...`
+                  ? (selectedLanguage === 'auto' ? 'Recording speech... Tap red square to finish' : `Recording in ${selectedLanguage}... Click red square to send`)
+                  : `Speak or type to ${npc.name} in any language (English, Hindi, etc.)...`
               }
               disabled={!isWithinRadius || isLoading || isRecording}
               className="flex-1 px-3 py-2 bg-[#14271A] border border-[#28392E] rounded-lg text-sm text-[#FFF8E9] placeholder-[#BAC9B9]/60 focus:outline-hidden focus:border-[#78A85B] transition disabled:opacity-40"
