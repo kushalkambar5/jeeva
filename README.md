@@ -244,23 +244,6 @@ An exhaustive breakdown of all models, APIs, and frameworks utilized across Jeev
 
 ---
 
-## Challenge Awards Alignment
-
-Jeeva was purposefully engineered to address the evaluation benchmarks of the **[Great Indian AI Internship Challenge](https://www.gnani.ai/internship)**:
-
-* **Main Character Award (Regional Indic Voice)**:
-  First-class native voice support for regional languages including Kannada (ಕನ್ನಡ), Tamil (தமிழ்), Telugu (తెలుగు), Hindi (हिन्दी), and Marathi (मराठी). Each NPC carries an authentic regional voice persona (`Kaveri`, `Deepak`, `Nalini`) and localized cultural idioms.
-* **Mixed Vibes Award (Code-Mixed Speech)**:
-  Seamless conversational handling of code-mixed Hinglish and Tanglish. Players naturally blend English technical vocabulary with Indic vernacular (*"Arjun bhai, clinic ka generator dead hai, naya copper coil lagao"*), and the system transcribes, comprehends, and responds in kind.
-* **Real Deal Award (Practical Real-World Problem Solving)**:
-  Simulates genuine rural Indian scenarios—managing primary healthcare center (PHC) emergencies during disaster recovery, bargaining with local kirana merchants, and resolving agricultural irrigation disputes.
-* **Noise Canceller Award (Telephonic Audio Robustness)**:
-  Leverages Gnani.ai's acoustic models trained on 14M+ hours of telephonic audio, ensuring reliable speech transcription even with laptop microphones, ambient room echo, and village game sound effects.
-* **Jugaad Genius Award (Grounded Agentic Autonomy)**:
-  Bridges conversational LLMs directly to an interactive game simulation loop. Spoken negotiations result in physical world consequences—NPCs open toolkits, pathfind across coordinates, inspect blown alternators, and hand over physical inventory items.
-
----
-
 ## Cast of Kaveripura
 
 | Character | Role | Voice Persona | Language / Dialect | Traits & Behavior |
