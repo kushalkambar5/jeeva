@@ -6,7 +6,11 @@ import Link from "next/link";
 import { ArrowUp, Compass, Gamepad2, Sparkles, MessageSquare } from "lucide-react";
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear();
+  const [currentYear, setCurrentYear] = React.useState(2026);
+
+  React.useEffect(() => {
+    setCurrentYear(new Date().getFullYear());
+  }, []);
 
   return (
     <footer className="bg-cream dark:bg-[#0A100C] text-darkbrown dark:text-[#E2EDE1] border-t-4 border-[#3D3429] dark:border-[#213327] transition-colors">

@@ -9,6 +9,8 @@
 
 *Built for the **[Gnani.ai Great Indian AI Internship Challenge](https://www.gnani.ai/internship)***
 
+You can play at: [https://jeeva-game.vercel.app/](https://jeeva-game.vercel.app/)
+
 ---
 
 [![Gnani AI Models](https://img.shields.io/badge/Gnani_AI-Prisma_STT_%7C_Timbre_TTS-0052CC?style=flat-square)](https://www.gnani.ai)
@@ -30,6 +32,99 @@ In traditional role-playing games, non-player characters (NPCs) are static cardb
 
 > [!NOTE]
 > This project was engineered for **The Great Indian AI Internship Challenge** hosted by **Gnani.ai** ([gnani.ai/internship](https://www.gnani.ai/internship)), demonstrating real-world applications of sovereign Indian AI across telephony-grade speech-to-text, natural expressive Indic text-to-speech, and grounded reasoning.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+* **Node.js**: `v20.x` or higher
+* **PostgreSQL**: `v14` or higher (local instance or cloud provider like Neon / Supabase)
+* **Gnani.ai API Credentials**: Obtain an API Key from the [Gnani AI Voice Platform](https://app.gnani.ai/voice)
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/your-username/jeeva_game.git
+   cd jeeva_game
+   ```
+
+2. **Install project dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables:**
+   Create a `.env` file in the project root:
+   ```env
+   # PostgreSQL connection string
+   DATABASE_URL="postgresql://postgres:password@localhost:5432/jeeva"
+
+   # Gnani.ai API credentials (from https://app.gnani.ai/voice)
+   GNANI_API_KEY="your_gnani_api_key_here"
+   GNANI_STT_URL="https://api.vachana.ai/stt/v3"
+   GNANI_TTS_URL="https://api.vachana.ai/api/v1/tts/inference"
+   GNANI_DEFAULT_LANGUAGE="hi-IN"
+
+   # High-speed LLM inference (Evon v3.3 weights or Groq endpoint)
+   GROQ_API_KEY="your_inference_api_key_here"
+
+   # NextAuth session configuration
+   NEXTAUTH_URL="http://localhost:3000"
+   NEXTAUTH_SECRET="generate_a_random_32_character_secret_key"
+   ```
+
+4. **Initialize database schema and seed village data:**
+   ```bash
+   npm run db:push
+   npm run db:seed
+   ```
+
+5. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+
+6. **Launch the experience:**
+   Navigate to [http://localhost:3000](http://localhost:3000) to view the project overview, or jump straight into the playable simulation at [http://localhost:3000/play](http://localhost:3000/play).
+
+### Required Database Tables & Initial Pre-Game Seed Rows
+
+Running `npm run db:seed` (implemented in `db/seed.ts` via `db/schema.ts`) populates the database with the strict rows required before the game loop and dialogue systems start. The dialogue engine (`lib/npcDialogue.ts`) and NPC interaction endpoint (`/api/npc/talk`) strictly constrain NPC personas and memory retrieval to these records:
+
+#### 1. `npc_definitions` (`npc_definations`) Table — 10 Required Character Rows
+
+| `id` | `name` | `role` | `voice_id` / `lang` | `home_zone` | `starting_inventory` | `personality_traits` |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `priya_wife` | Priya | Player's Loving Wife | `hi_in_female_priya_01` (hi-IN) | `player_home` | `[{"item_id":"herbal_tea_flask", "quantity":2}]` | playful, flirtatious, affectionate, witty |
+| `ravi_farmer` | Ravi | Village Farmer | `hi_in_male_ravi_01` (hi-IN) | `ravi_farmhouse` | `[{"item_id":"wheat_grain_sack", "quantity":6}, {"item_id":"fresh_carrots", "quantity":10}]` | hardworking, anxious, humble, honest |
+| `meera_doctor` | Dr. Meera | Village Physician | `hi_in_female_meera_01` (hi-IN) | `hospital` | `[{"item_id":"broken_medical_machine", "quantity":1}, {"item_id":"sterile_bandages", "quantity":8}, {"item_id":"antiseptic_salve", "quantity":4}]` | compassionate, stressed, scientific |
+| `arjun_mechanic` | Arjun | Master Mechanic | `hi_in_male_arjun_01` (hi-IN) | `workshop` | `[{"item_id":"mechanic_toolset", "quantity":1}, {"item_id":"insulated_copper_wire", "quantity":3}]` | gruff, proud, practical, stubborn |
+| `dev_shopkeeper` | Dev | Village Merchant | `hi_in_male_dev_01` (hi-IN) | `shop` | `[{"item_id":"copper_induction_coil", "quantity":1, "base_price":90}, {"item_id":"kerosene_canister", "quantity":4}, {"item_id":"rock_salt_bag", "quantity":6}]` | shrewd, calculating, profit-minded |
+| `ramesh_elder` | Ramesh Kaka | Village Elder | `hi_in_male_ramesh_01` (hi-IN) | `central_plaza` | `[{"item_id":"elder_walking_staff", "quantity":1}]` | wise, contemplative, traditionalist |
+| `vikram_police` | Inspector Vikram | Village Constable | `hi_in_male_vikram_01` (hi-IN) | `police_post` | `[{"item_id":"police_lathi_torch", "quantity":1}]` | vigilant, authoritative, dutiful |
+| `kalia_thief` | Kalia | Village Lock Specialist | `hi_in_male_kalia_01` (hi-IN) | `shadow_alleys` | `[{"item_id":"lockpick_set", "quantity":3, "base_price":30}, {"item_id":"brass_gears", "quantity":2}]` | cunning, cautious, street-smart |
+| `suresh_villager` | Suresh | Village Mason | `hi_in_male_suresh_01` (hi-IN) | `residential_lane` | `[{"item_id":"masonry_trowel", "quantity":1}]` | simple, tired, honest, cooperative |
+| `maya_villager` | Maya | Village Artisan | `hi_in_female_maya_01` (hi-IN) | `central_plaza` | `[{"item_id":"woven_cotton_cloth", "quantity":3, "base_price":12}]` | creative, cheerful, curious, optimistic |
+
+#### 2. `npc_memories` Table — 6 Baseline Global Semantic Lore Rows
+
+| `npcId` | `memoryType` | `importance` | `content` | `metadata` |
+| :--- | :--- | :--- | :--- | :--- |
+| `meera_doctor` | `semantic` | 9 | *"The hospital backup generator was damaged in the storm and clinic medicine refrigeration needs power urgently."* | `{"is_global": true, "seed": true}` |
+| `dev_shopkeeper` | `semantic` | 8 | *"Dev's general store stocks the only working copper induction coil remaining in the village."* | `{"is_global": true, "seed": true}` |
+| `arjun_mechanic` | `semantic` | 8 | *"Arjun can repair village generators and mechanical pumps if supplied with the correct tools and copper coils."* | `{"is_global": true, "seed": true}` |
+| `ramesh_elder` | `semantic` | 8 | *"A severe thunderstorm damaged Kaveripura's electrical grid and flooded the low-lying agricultural fields."* | `{"is_global": true, "seed": true}` |
+| `vikram_police` | `semantic` | 7 | *"Village curfew is strictly enforced after dark to protect damaged homes and warehouses from opportunistic thieves."* | `{"is_global": true, "seed": true}` |
+| `ravi_farmer` | `semantic` | 7 | *"The farm pump is idle without power, risking the remaining standing grain harvest in the lower fields."* | `{"is_global": true, "seed": true}` |
+
+#### 3. Runtime Tables (Dynamically populated upon session initialization)
+
+* **`users`**: Auto-provisions player profile (`wallet_balance: 100`, `zone: "player_home"`, initial empty backpack, `hp: 100`).
+* **`npc_working_memories`**: Rolling FIFO window holding the last 5 conversation exchanges per player-NPC pair.
+* **`npc_relationships`**: Manages the 5-dimensional relationship metrics (`trust`, `respect`, `familiarity`, `affinity`, `solidarity`), tier transitions, and negotiated bargaining discounts.
 
 ---
 
@@ -293,63 +388,6 @@ jeeva_game/
         ├── promptBuilder.ts      # Cognitive memory prompt section formatter
         └── types.ts              # Memory data structures & relationship tiers
 ```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-* **Node.js**: `v20.x` or higher
-* **PostgreSQL**: `v14` or higher (local instance or cloud provider like Neon / Supabase)
-* **Gnani.ai API Credentials**: Obtain an API Key from the [Gnani AI Voice Platform](https://app.gnani.ai/voice)
-
-### Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-username/jeeva_game.git
-   cd jeeva_game
-   ```
-
-2. **Install project dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure environment variables:**
-   Create a `.env` file in the project root:
-   ```env
-   # PostgreSQL connection string
-   DATABASE_URL="postgresql://postgres:password@localhost:5432/jeeva"
-
-   # Gnani.ai API credentials (from https://app.gnani.ai/voice)
-   GNANI_API_KEY="your_gnani_api_key_here"
-   GNANI_STT_URL="https://api.vachana.ai/stt/v3"
-   GNANI_TTS_URL="https://api.vachana.ai/api/v1/tts/inference"
-   GNANI_DEFAULT_LANGUAGE="hi-IN"
-
-   # High-speed LLM inference (Evon v3.3 weights or Groq endpoint)
-   GROQ_API_KEY="your_inference_api_key_here"
-
-   # NextAuth session configuration
-   NEXTAUTH_URL="http://localhost:3000"
-   NEXTAUTH_SECRET="generate_a_random_32_character_secret_key"
-   ```
-
-4. **Initialize database schema and seed village data:**
-   ```bash
-   npm run db:push
-   npm run db:seed
-   ```
-
-5. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
-
-6. **Launch the experience:**
-   Navigate to [http://localhost:3000](http://localhost:3000) to view the project overview, or jump straight into the playable simulation at [http://localhost:3000/play](http://localhost:3000/play).
 
 ---
 
